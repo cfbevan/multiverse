@@ -1,0 +1,14 @@
+all: false
+dir: "internal/mocks"
+filename: "{{.SrcPackageName}}_mock.go"
+force-file-write: true
+formatter: goimports
+log-level: info
+structname: "{{.Mock}}{{.InterfaceName}}"
+pkgname: "mocks"
+recursive: false
+template: testify
+packages:
+  github.com/chbevan/multiverse/internal/cli:
+    config:
+      all: true

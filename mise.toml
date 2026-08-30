@@ -1,0 +1,10 @@
+[tools]
+go = "1.27"
+golangci-lint = "latest"
+goreleaser = "latest"
+mockery = "latest"
+
+[tasks.serve]
+description = "Run the app"
+sources = ["cmd/server/*", "internal/**/*", "templates/html/**/*"]
+run = "go run ./cmd/server"

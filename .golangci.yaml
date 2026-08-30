@@ -1,0 +1,102 @@
+version: "2"
+linters:
+  enable: 
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - canonicalheader
+    - cyclop
+    - containedctx
+    - contextcheck
+    - copyloopvar
+    - decorder
+    - dogsled
+    - dupl
+    - embeddedstructfieldcheck
+    - errcheck
+    - errchkjson
+    - errname
+    - errorlint
+    - exhaustive
+    - exptostd
+    - fatcontext
+    - funcorder
+    - gocheckcompilerdirectives
+    - gochecknoglobals
+    - gochecknoinits
+    - gocognit
+    - goconst
+    - godoclint
+    - godox
+    - gosec
+    - govet
+    - iface
+    - ineffassign
+    - iotamixing
+    - ireturn
+    - makezero
+    - modernize
+    - musttag
+    - mnd
+    - nakedret
+    - nestif
+    - nilerr
+    - nilnesserr
+    - nilnil
+    - nlreturn
+    - nolintlint
+    - nonamedreturns
+    - perfsprint
+    - prealloc
+    - predeclared
+    - reassign
+    - recvcheck
+    - staticcheck
+    - tagalign
+    - unconvert
+    - unparam
+    - unused
+    - usestdlibvars
+    - usetesting
+    - wastedassign
+    - whitespace
+  settings:
+    dupl:
+      threshold: 100
+    funcorder:
+      constructor: true
+      struct-method: true
+      function: false
+    gocognit:
+      min-complexity: 15
+    gocyclo:
+      min-complexity: 15
+    godoclint:
+      enable:
+        - pkg-doc
+        - single-pkg-doc
+        - start-with-name
+        - require-doc
+        - deprecated
+      options:
+        require-doc:
+          ignore-unexported: false
+        start-with-name:
+          include-unexported: true
+    iface:
+      enable:
+        - identical
+        - opaque
+        - unexported
+    nakedret:
+      max-func-lines: 0
+    nolintlint:
+      allow-unused: false
+      require-explanation: true
+      require-specific: true
+formatters:
+  enable:
+    - gofmt
+    - goimports
+    - golines

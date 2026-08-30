@@ -1,0 +1,10 @@
+{
+  "debug.javascript.defaultRuntimeExecutable": {
+    "pwa-node": "/Users/charlesbevan/.local/share/mise/shims/node"
+  },
+  "go.alternateTools": {
+    "go": "/Users/charlesbevan/.local/share/mise/shims/go",
+    "dlv": "/Users/charlesbevan/.local/share/mise/shims/dlv",
+    "gopls": "/Users/charlesbevan/.local/share/mise/shims/gopls"
+  }
+}
