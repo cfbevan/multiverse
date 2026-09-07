@@ -25,7 +25,7 @@ run = "go run ./cmd/ctl"
 
 [tasks.test]
 description = "Run test suite"
-run = "go test ./..."
+run = "go test ./... -count=1 -v"
 
 [tasks.test-integration]
 description = "Run integration tests"

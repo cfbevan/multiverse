@@ -763,45 +763,183 @@ func (app *Application) createPicturePostHTMX(w http.ResponseWriter, r *http.Req
 	app.renderFragment(w, r, http.StatusCreated, "pictures.html", "pictureCard", post)
 }
 
-//nolint:gocognit // multipart validation and creation flow has multiple explicit guard branches.
 func (app *Application) createVideoPostHTMX(w http.ResponseWriter, r *http.Request) {
-	if !app.requireSiteSectionEnabled(w, r, "videos_enabled") {
+	app.createTitledMediaPostHTMX(w, r, "video")
+}
+
+func (app *Application) createTitledMediaPostHTMX(
+	w http.ResponseWriter,
+	r *http.Request,
+	mediaKind string,
+) {
+	if mediaKind == "audio" {
+		app.createMediaPostHTMX(
+			w,
+			r,
+			"audio_enabled",
+			maxAudioUploadBytes,
+			app.validateAudioUploadRequest,
+			func(
+				ctx context.Context,
+				actor *models.Actor,
+				upload *multipartUpload,
+				title string,
+				description string,
+				visibility string,
+			) error {
+				post, err := app.createAudioPostFromUpload(
+					ctx,
+					actor,
+					upload,
+					title,
+					description,
+					visibility,
+				)
+				if err != nil {
+					return err
+				}
+
+				app.renderFragment(
+					w,
+					r,
+					http.StatusCreated,
+					"audio.html",
+					"audioList",
+					map[string]any{
+						"Posts": []models.AudioPost{*post},
+					},
+				)
+
+				return nil
+			},
+		)
+
 		return
 	}
 
-	upload, err := parseMultipartUpload(w, r, maxVideoUploadBytes)
+	app.createMediaPostHTMX(
+		w,
+		r,
+		"videos_enabled",
+		maxVideoUploadBytes,
+		app.validateVideoUploadRequest,
+		func(
+			ctx context.Context,
+			actor *models.Actor,
+			upload *multipartUpload,
+			title string,
+			description string,
+			visibility string,
+		) error {
+			post, err := app.createVideoPostFromUpload(
+				ctx,
+				actor,
+				upload,
+				title,
+				description,
+				visibility,
+			)
+			if err != nil {
+				return err
+			}
+
+			app.renderFragment(w, r, http.StatusCreated, "videos.html", "videoList", map[string]any{
+				"Posts": []models.VideoPost{*post},
+			})
+
+			return nil
+		},
+	)
+}
+
+func (app *Application) createMediaPostHTMX(
+	w http.ResponseWriter,
+	r *http.Request,
+	sectionEnabled string,
+	maxUploadBytes int64,
+	validateFn func(http.ResponseWriter, *http.Request, *multipartUpload) (*models.Actor, string, string, string, bool),
+	createFn func(context.Context, *models.Actor, *multipartUpload, string, string, string) error,
+) {
+	if !app.requireSiteSectionEnabled(w, r, sectionEnabled) {
+		return
+	}
+
+	upload, err := parseMultipartUpload(w, r, maxUploadBytes)
 	if err != nil {
 		app.clientError(w, http.StatusBadRequest)
 
 		return
 	}
 
-	token := bearerTokenFromRequest(r, upload.Values["token"])
-	if token == "" {
-		app.clientError(w, http.StatusUnauthorized)
-
-		return
-	}
-
-	user, err := app.userFromBearerToken(r.Context(), token)
-	if err != nil {
-		app.clientError(w, http.StatusUnauthorized)
-
+	actor, title, description, visibility, ok := validateFn(w, r, upload)
+	if !ok {
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), mediaCreateTimeout)
 	defer cancel()
 
-	if _, err = app.actors.GetByUserID(ctx, user.ID); err != nil {
+	if err := createFn(ctx, actor, upload, title, description, visibility); err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
+func (app *Application) validateVideoUploadRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+	upload *multipartUpload,
+) (*models.Actor, string, string, string, bool) {
+	return app.validateAudioVideoUploadRequest(
+		w,
+		r,
+		upload,
+		maxVideoUploadBytes,
+		maxVideoTitleLength,
+		maxVideoDescriptionLength,
+		"videos.html",
+		"videoFormError",
+		"must be less than 500MB",
+	)
+}
+
+func (app *Application) validateAudioVideoUploadRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+	upload *multipartUpload,
+	maxUploadBytes int64,
+	maxTitleLength int,
+	maxDescriptionLength int,
+	templateName string,
+	errorFragment string,
+	fileTooLargeMessage string,
+) (*models.Actor, string, string, string, bool) {
+	token := bearerTokenFromRequest(r, upload.Values["token"])
+	if token == "" {
+		app.clientError(w, http.StatusUnauthorized)
+
+		return nil, "", "", "", false
+	}
+
+	user, err := app.userFromBearerToken(r.Context(), token)
+	if err != nil {
+		app.clientError(w, http.StatusUnauthorized)
+
+		return nil, "", "", "", false
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), mediaCreateTimeout)
+	defer cancel()
+
+	actor, err := app.actors.GetByUserID(ctx, user.ID)
+	if err != nil {
 		if errors.Is(err, models.ErrRecordNotFound) {
 			app.clientError(w, http.StatusUnauthorized)
 
-			return
+			return nil, "", "", "", false
 		}
 		app.serverError(w, r, err)
 
-		return
+		return nil, "", "", "", false
 	}
 
 	title := upload.Values["title"]
@@ -814,12 +952,12 @@ func (app *Application) createVideoPostHTMX(w http.ResponseWriter, r *http.Reque
 	v := validator.NewValidator()
 	v.CheckField(validator.NotBlank(title), "title", "must be provided")
 	v.CheckField(
-		validator.MaxChars(title, maxVideoTitleLength),
+		validator.MaxChars(title, maxTitleLength),
 		"title",
 		"must not be more than 200 characters long",
 	)
 	v.CheckField(
-		validator.MaxChars(description, maxVideoDescriptionLength),
+		validator.MaxChars(description, maxDescriptionLength),
 		"description",
 		"must not be more than 2000 characters long",
 	)
@@ -831,8 +969,8 @@ func (app *Application) createVideoPostHTMX(w http.ResponseWriter, r *http.Reque
 	), "visibility", "must be one of public, unlisted, followers, private")
 	if !upload.HasFile {
 		v.AddFieldError("file", "must be provided")
-	} else if upload.FileSize > maxVideoDescriptionFileSize {
-		v.AddFieldError("file", "must be less than 500MB")
+	} else if upload.FileSize > maxUploadBytes {
+		v.AddFieldError("file", fileTooLargeMessage)
 	}
 
 	if !v.Valid() {
@@ -840,26 +978,25 @@ func (app *Application) createVideoPostHTMX(w http.ResponseWriter, r *http.Reque
 			w,
 			r,
 			http.StatusUnprocessableEntity,
-			"videos.html",
-			"videoFormError",
+			templateName,
+			errorFragment,
 			map[string]any{errorsKey: v.FieldErrors},
 		)
 
-		return
+		return nil, "", "", "", false
 	}
 
-	actor, err := app.actors.GetByUserID(ctx, user.ID)
-	if err != nil {
-		if errors.Is(err, models.ErrRecordNotFound) {
-			app.clientError(w, http.StatusUnauthorized)
+	return actor, title, description, visibility, true
+}
 
-			return
-		}
-		app.serverError(w, r, err)
-
-		return
-	}
-
+func (app *Application) createVideoPostFromUpload(
+	ctx context.Context,
+	actor *models.Actor,
+	upload *multipartUpload,
+	title string,
+	description string,
+	visibility string,
+) (*models.VideoPost, error) {
 	mediaType := strings.TrimSpace(upload.FileContentType)
 	if mediaType == "" {
 		mediaType = defaultMediaType
@@ -877,9 +1014,7 @@ func (app *Application) createVideoPostHTMX(w http.ResponseWriter, r *http.Reque
 	)
 	isPublic := visibility == models.VisibilityPublic || visibility == models.VisibilityUnlisted
 	if err := app.uploadMediaFile(ctx, "video", objectKey, mediaType, upload.FileData); err != nil {
-		app.serverError(w, r, err)
-
-		return
+		return nil, err
 	}
 
 	var mediaAssetID int64
@@ -907,9 +1042,7 @@ func (app *Application) createVideoPostHTMX(w http.ResponseWriter, r *http.Reque
 		originalFilename,
 		isPublic,
 	).Scan(&mediaAssetID); err != nil {
-		app.serverError(w, r, err)
-
-		return
+		return nil, err
 	}
 
 	post := &models.VideoPost{
@@ -938,14 +1071,10 @@ func (app *Application) createVideoPostHTMX(w http.ResponseWriter, r *http.Reque
 		post.MediaAssetID,
 		post.APObjectID,
 	).Scan(&post.ID, &post.PublishedAt, &post.UpdatedAt, &post.Version); err != nil {
-		app.serverError(w, r, err)
-
-		return
+		return nil, err
 	}
 
-	app.renderFragment(w, r, http.StatusCreated, "videos.html", "videoList", map[string]any{
-		"Posts": []models.VideoPost{*post},
-	})
+	return post, nil
 }
 
 func (app *Application) loadPictureFeedPosts(

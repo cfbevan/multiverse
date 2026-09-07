@@ -542,7 +542,7 @@ func (app *Application) oidcLogin(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 		MaxAge:   oidcStateCookieMaxAge,
 	})
 
@@ -599,7 +599,7 @@ func (app *Application) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 		MaxAge:   -1,
 	})
 
@@ -843,7 +843,6 @@ func oidcIdentityFromIDToken(idToken string) (string, string) {
 	return strings.TrimSpace(email), strings.TrimSpace(name)
 }
 
-//nolint:gocognit // user lookup/create flow handles several expected branches.
 func (app *Application) findOrCreateOIDCUser(
 	ctx context.Context,
 	email string,
@@ -857,46 +856,17 @@ func (app *Application) findOrCreateOIDCUser(
 		return nil, err
 	}
 
-	signupsEnabled, err := app.siteConfigEnabled(ctx, "signup_enabled")
-	if err != nil {
+	if err := app.ensureSignupsEnabled(ctx); err != nil {
 		return nil, err
-	}
-	if !signupsEnabled {
-		return nil, errors.New("signups are disabled")
 	}
 
-	rawPassword, _, err := newPasswordResetToken()
-	if err != nil {
-		return nil, err
-	}
-	hash, err := hashPassword(rawPassword)
+	newUser, err := newOIDCUser(email, displayName)
 	if err != nil {
 		return nil, err
 	}
 
-	handle := generateOIDCHandle(email)
-	if displayName == "" {
-		displayName = handle
-	}
-
-	newUser := &models.User{
-		Email:        email,
-		Handle:       handle,
-		DisplayName:  displayName,
-		PasswordHash: hash,
-		Bio:          "",
-		Activated:    true,
-	}
-
-	if err := app.users.Insert(ctx, newUser); err != nil {
-		if errors.Is(err, models.ErrDuplicateHandle) {
-			newUser.Handle = fmt.Sprintf("%s%d", handle, time.Now().Unix()%oidcHandleSuffixMod)
-			if err := app.users.Insert(ctx, newUser); err != nil {
-				return nil, err
-			}
-		} else {
-			return nil, err
-		}
+	if err := app.insertOIDCUser(ctx, newUser); err != nil {
+		return nil, err
 	}
 
 	if err := app.insertRegistrationActor(ctx, newUser); err != nil {
@@ -907,6 +877,57 @@ func (app *Application) findOrCreateOIDCUser(
 	}
 
 	return newUser, nil
+}
+
+func (app *Application) ensureSignupsEnabled(ctx context.Context) error {
+	signupsEnabled, err := app.siteConfigEnabled(ctx, "signup_enabled")
+	if err != nil {
+		return err
+	}
+	if !signupsEnabled {
+		return errors.New("signups are disabled")
+	}
+
+	return nil
+}
+
+func newOIDCUser(email string, displayName string) (*models.User, error) {
+	rawPassword, _, err := newPasswordResetToken()
+	if err != nil {
+		return nil, err
+	}
+
+	hash, err := hashPassword(rawPassword)
+	if err != nil {
+		return nil, err
+	}
+
+	handle := generateOIDCHandle(email)
+	if displayName == "" {
+		displayName = handle
+	}
+
+	return &models.User{
+		Email:        email,
+		Handle:       handle,
+		DisplayName:  displayName,
+		PasswordHash: hash,
+		Bio:          "",
+		Activated:    true,
+	}, nil
+}
+
+func (app *Application) insertOIDCUser(ctx context.Context, user *models.User) error {
+	if err := app.users.Insert(ctx, user); err == nil {
+		return nil
+	} else if !errors.Is(err, models.ErrDuplicateHandle) {
+		return err
+	}
+
+	baseHandle := user.Handle
+	user.Handle = fmt.Sprintf("%s%d", baseHandle, time.Now().Unix()%oidcHandleSuffixMod)
+
+	return app.users.Insert(ctx, user)
 }
 
 func generateOIDCHandle(email string) string {
