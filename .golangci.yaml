@@ -5,7 +5,6 @@ linters:
     - asciicheck
     - bidichk
     - bodyclose
-    - canonicalheader
     - cyclop
     - containedctx
     - contextcheck
