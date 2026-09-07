@@ -167,108 +167,42 @@ func (app *Application) createAudioPost(w http.ResponseWriter, r *http.Request) 
 }
 
 func (app *Application) createAudioPostHTMX(w http.ResponseWriter, r *http.Request) {
-	if !app.requireSiteSectionEnabled(w, r, "audio_enabled") {
-		return
-	}
+	app.createTitledMediaPostHTMX(w, r, "audio")
+}
 
-	upload, err := parseMultipartUpload(w, r, maxAudioUploadBytes)
-	if err != nil {
-		app.clientError(w, http.StatusBadRequest)
-
-		return
-	}
-
-	token := bearerTokenFromRequest(r, upload.Values["token"])
-	if token == "" {
-		app.clientError(w, http.StatusUnauthorized)
-
-		return
-	}
-
-	user, err := app.userFromBearerToken(r.Context(), token)
-	if err != nil {
-		app.clientError(w, http.StatusUnauthorized)
-
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), mediaCreateTimeout)
-	defer cancel()
-
-	_, err = app.actors.GetByUserID(ctx, user.ID)
-	if err != nil {
-		if errors.Is(err, models.ErrRecordNotFound) {
-			app.clientError(w, http.StatusUnauthorized)
-
-			return
-		}
-		app.serverError(w, r, err)
-
-		return
-	}
-
-	title := upload.Values["title"]
-	description := upload.Values["description"]
-	visibility := upload.Values["visibility"]
-	if visibility == "" {
-		visibility = models.VisibilityPublic
-	}
-
-	v := validator.NewValidator()
-	v.CheckField(validator.NotBlank(title), "title", "must be provided")
-	v.CheckField(
-		validator.MaxChars(title, maxAudioTitleLength),
-		"title",
-		"must not be more than 200 characters long",
+func (app *Application) validateAudioUploadRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+	upload *multipartUpload,
+) (*models.Actor, string, string, string, bool) {
+	return app.validateAudioVideoUploadRequest(
+		w,
+		r,
+		upload,
+		maxAudioUploadBytes,
+		maxAudioTitleLength,
+		maxAudioDescriptionLength,
+		"audio.html",
+		"audioFormError",
+		"must be less than 50MB",
 	)
-	v.CheckField(
-		validator.MaxChars(description, maxAudioDescriptionLength),
-		"description",
-		"must not be more than 2000 characters long",
-	)
-	v.CheckField(validator.PermittedValue(visibility,
-		models.VisibilityPublic,
-		models.VisibilityUnlisted,
-		models.VisibilityFollowers,
-		models.VisibilityPrivate,
-	), "visibility", "must be one of public, unlisted, followers, private")
+}
 
-	if !upload.HasFile {
-		v.AddFieldError("file", "must be provided")
-	} else if upload.FileSize > maxAudioUploadBytes {
-		v.AddFieldError("file", "must be less than 50MB")
-	}
-
-	if !v.Valid() {
-		app.renderFragment(
-			w,
-			r,
-			http.StatusUnprocessableEntity,
-			"audio.html",
-			"audioFormError",
-			map[string]any{errorsKey: v.FieldErrors},
-		)
-
-		return
-	}
-
-	actor, err := app.actors.GetByUserID(ctx, user.ID)
-	if err != nil {
-		if errors.Is(err, models.ErrRecordNotFound) {
-			app.clientError(w, http.StatusUnauthorized)
-			return
-		}
-		app.serverError(w, r, err)
-		return
-	}
-
+func (app *Application) createAudioPostFromUpload(
+	ctx context.Context,
+	actor *models.Actor,
+	upload *multipartUpload,
+	title string,
+	description string,
+	visibility string,
+) (*models.AudioPost, error) {
 	mediaType := strings.TrimSpace(upload.FileContentType)
 	if mediaType == "" {
-		mediaType = "application/octet-stream"
+		mediaType = defaultMediaType
 	}
 	originalFilename := strings.TrimSpace(upload.FileName)
 	if originalFilename == "" {
-		originalFilename = "upload.bin"
+		originalFilename = defaultUploadFilename
 	}
 
 	objectKey := fmt.Sprintf(
@@ -279,8 +213,7 @@ func (app *Application) createAudioPostHTMX(w http.ResponseWriter, r *http.Reque
 	)
 	isPublic := visibility == models.VisibilityPublic || visibility == models.VisibilityUnlisted
 	if err := app.uploadMediaFile(ctx, "audio", objectKey, mediaType, upload.FileData); err != nil {
-		app.serverError(w, r, err)
-		return
+		return nil, err
 	}
 
 	var mediaAssetID int64
@@ -308,8 +241,7 @@ func (app *Application) createAudioPostHTMX(w http.ResponseWriter, r *http.Reque
 		originalFilename,
 		isPublic,
 	).Scan(&mediaAssetID); err != nil {
-		app.serverError(w, r, err)
-		return
+		return nil, err
 	}
 
 	post := &models.AudioPost{
@@ -326,13 +258,10 @@ func (app *Application) createAudioPostHTMX(w http.ResponseWriter, r *http.Reque
 		),
 	}
 	if err := app.audioPosts.Insert(ctx, post); err != nil {
-		app.serverError(w, r, err)
-		return
+		return nil, err
 	}
 
-	app.renderFragment(w, r, http.StatusCreated, "audio.html", "audioList", map[string]any{
-		"Posts": []models.AudioPost{*post},
-	})
+	return post, nil
 }
 
 func (app *Application) listAudioPosts(w http.ResponseWriter, r *http.Request) {

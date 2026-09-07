@@ -1046,6 +1046,7 @@ func checkOutboxContainsTypes(t *testing.T, srv *httptest.Server, handle string)
 	}
 }
 
+// TestIntegrationAudioAndPictureUploadToMinio verifies media uploads persist in MinIO.
 func TestIntegrationAudioAndPictureUploadToMinio(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test skipped in short mode")
@@ -1077,6 +1078,24 @@ func TestIntegrationAudioAndPictureUploadToMinio(t *testing.T) {
 	actorID := mustActorID(t, db, handle)
 
 	pictureContents := []byte("hello picture bytes")
+	assertPictureUploadToMinio(t, srv, db, client, ctx, actorID, token, pictureContents)
+
+	audioContents := []byte("hello audio bytes")
+	assertAudioUploadToMinio(t, srv, db, client, ctx, actorID, token, audioContents)
+}
+
+func assertPictureUploadToMinio(
+	t *testing.T,
+	srv *httptest.Server,
+	db *sql.DB,
+	client *minio.Client,
+	ctx context.Context,
+	actorID int64,
+	token string,
+	pictureContents []byte,
+) {
+	t.Helper()
+
 	pictureReq := multipartUploadRequest(t, srv.URL+"/pictures/partials/create", map[string]string{
 		"token":      token,
 		"caption":    "test picture",
@@ -1087,38 +1106,41 @@ func TestIntegrationAudioAndPictureUploadToMinio(t *testing.T) {
 	if pictureRes.StatusCode != http.StatusCreated {
 		t.Fatalf("picture upload status = %d, want %d", pictureRes.StatusCode, http.StatusCreated)
 	}
+
 	pictureFragment, err := io.ReadAll(pictureRes.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(pictureFragment), `/pictures/`) || !strings.Contains(string(pictureFragment), `/preview`) {
+	if !strings.Contains(string(pictureFragment), `/pictures/`) ||
+		!strings.Contains(string(pictureFragment), `/preview`) {
 		t.Fatalf("picture create response missing preview image path")
 	}
 
 	var pictureBucket, pictureKey, pictureFilename string
-	if err := db.QueryRow(`SELECT bucket, object_key, original_filename FROM media_assets WHERE owner_actor_id = $1 ORDER BY id DESC LIMIT 1`, actorID).Scan(&pictureBucket, &pictureKey, &pictureFilename); err != nil {
+	err = db.QueryRow(
+		`SELECT bucket, object_key, original_filename FROM media_assets WHERE owner_actor_id = $1 ORDER BY id DESC LIMIT 1`,
+		actorID,
+	).Scan(&pictureBucket, &pictureKey, &pictureFilename)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if pictureBucket != "pictures" {
-		t.Fatalf("picture bucket = %q, want %q", pictureBucket, "pictures")
-	}
-	if pictureFilename != "photo.png" {
-		t.Fatalf("picture filename = %q, want %q", pictureFilename, "photo.png")
-	}
-	if obj, err := client.GetObject(ctx, pictureBucket, pictureKey, minio.GetObjectOptions{}); err != nil {
-		t.Fatalf("picture object missing from minio: %v", err)
-	} else {
-		defer func() { _ = obj.Close() }()
-		data, err := io.ReadAll(obj)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !bytes.Equal(data, pictureContents) {
-			t.Fatalf("picture object bytes = %q, want %q", string(data), string(pictureContents))
-		}
-	}
+	assertStringEqual(t, "picture bucket", pictureBucket, "pictures")
+	assertStringEqual(t, "picture filename", pictureFilename, "photo.png")
+	assertMinioObjectBytes(t, client, ctx, pictureBucket, pictureKey, pictureContents, "picture")
+}
 
-	audioContents := []byte("hello audio bytes")
+func assertAudioUploadToMinio(
+	t *testing.T,
+	srv *httptest.Server,
+	db *sql.DB,
+	client *minio.Client,
+	ctx context.Context,
+	actorID int64,
+	token string,
+	audioContents []byte,
+) {
+	t.Helper()
+
 	audioReq := multipartUploadRequest(t, srv.URL+"/audio/partials/create", map[string]string{
 		"token":       token,
 		"title":       "test audio",
@@ -1130,6 +1152,7 @@ func TestIntegrationAudioAndPictureUploadToMinio(t *testing.T) {
 	if audioRes.StatusCode != http.StatusCreated {
 		t.Fatalf("audio upload status = %d, want %d", audioRes.StatusCode, http.StatusCreated)
 	}
+
 	audioFragment, err := io.ReadAll(audioRes.Body)
 	if err != nil {
 		t.Fatal(err)
@@ -1137,26 +1160,48 @@ func TestIntegrationAudioAndPictureUploadToMinio(t *testing.T) {
 	requireFragmentContains(t, string(audioFragment), "<audio", "/audio/", "/preview")
 
 	var audioBucket, audioKey, audioFilename string
-	if err := db.QueryRow(`SELECT ma.bucket, ma.object_key, ma.original_filename FROM audio_posts ap JOIN media_assets ma ON ma.id = ap.media_asset_id WHERE ap.actor_id = $1 ORDER BY ap.id DESC LIMIT 1`, actorID).Scan(&audioBucket, &audioKey, &audioFilename); err != nil {
+	err = db.QueryRow(
+		`SELECT ma.bucket, ma.object_key, ma.original_filename FROM audio_posts ap JOIN media_assets ma ON ma.id = ap.media_asset_id WHERE ap.actor_id = $1 ORDER BY ap.id DESC LIMIT 1`,
+		actorID,
+	).Scan(&audioBucket, &audioKey, &audioFilename)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if audioBucket != "audio" {
-		t.Fatalf("audio bucket = %q, want %q", audioBucket, "audio")
+	assertStringEqual(t, "audio bucket", audioBucket, "audio")
+	assertStringEqual(t, "audio filename", audioFilename, "track.mp3")
+	assertMinioObjectBytes(t, client, ctx, audioBucket, audioKey, audioContents, "audio")
+}
+
+func assertStringEqual(t *testing.T, field string, got string, want string) {
+	t.Helper()
+	if got != want {
+		t.Fatalf("%s = %q, want %q", field, got, want)
 	}
-	if audioFilename != "track.mp3" {
-		t.Fatalf("audio filename = %q, want %q", audioFilename, "track.mp3")
+}
+
+func assertMinioObjectBytes(
+	t *testing.T,
+	client *minio.Client,
+	ctx context.Context,
+	bucket string,
+	objectKey string,
+	want []byte,
+	label string,
+) {
+	t.Helper()
+
+	obj, err := client.GetObject(ctx, bucket, objectKey, minio.GetObjectOptions{})
+	if err != nil {
+		t.Fatalf("%s object missing from minio: %v", label, err)
 	}
-	if obj, err := client.GetObject(ctx, audioBucket, audioKey, minio.GetObjectOptions{}); err != nil {
-		t.Fatalf("audio object missing from minio: %v", err)
-	} else {
-		defer func() { _ = obj.Close() }()
-		data, err := io.ReadAll(obj)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !bytes.Equal(data, audioContents) {
-			t.Fatalf("audio object bytes = %q, want %q", string(data), string(audioContents))
-		}
+	defer func() { _ = obj.Close() }()
+
+	data, err := io.ReadAll(obj)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(data, want) {
+		t.Fatalf("%s object bytes = %q, want %q", label, string(data), string(want))
 	}
 }
 
@@ -1190,14 +1235,21 @@ func newIntegrationApp(t *testing.T) *Application {
 func mustActorID(t *testing.T, db *sql.DB, handle string) int64 {
 	t.Helper()
 	var actorID int64
-	if err := db.QueryRow(`SELECT id FROM actors WHERE handle = $1`, handle).Scan(&actorID); err != nil {
+	if err := db.QueryRow(`SELECT id FROM actors WHERE handle = $1`, handle).
+		Scan(&actorID); err != nil {
 		t.Fatal(err)
 	}
 
 	return actorID
 }
 
-func multipartUploadRequest(t *testing.T, url string, values map[string]string, fileName, contentType string, contents []byte) *http.Request {
+func multipartUploadRequest(
+	t *testing.T,
+	url string,
+	values map[string]string,
+	fileName, contentType string,
+	contents []byte,
+) *http.Request {
 	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)

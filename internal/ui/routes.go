@@ -165,48 +165,32 @@ func (app *Application) blog(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *Application) loginPage(w http.ResponseWriter, r *http.Request) {
-	oidcEnabled, err := app.siteConfigEnabled(r.Context(), "oidc_enabled", true)
-	if err != nil {
-		oidcEnabled = true
-	}
-	oidcLoginEnabled, err := app.siteConfigEnabled(r.Context(), "oidc_login_enabled", true)
-	if err != nil {
-		oidcLoginEnabled = true
-	}
-	providers := app.oidcProviders()
-	googleConfigured := providers["google"].ClientID != "" && providers["google"].Secret != ""
-	appleConfigured := providers["apple"].ClientID != "" && providers["apple"].Secret != ""
-	facebookConfigured := providers["facebook"].ClientID != "" && providers["facebook"].Secret != ""
-	anyProviderConfigured := googleConfigured || appleConfigured || facebookConfigured
-
-	app.render(w, r, "login.html", map[string]any{
-		isAuthenticatedKey:          app.contextGetUser(r) != nil,
-		"OIDCEnabled":               oidcEnabled,
-		"OIDCLoginEnabled":          oidcLoginEnabled,
-		"OIDCLoginType":             "oidc",
-		"OIDCGoogleConfigured":      googleConfigured,
-		"OIDCAppleConfigured":       appleConfigured,
-		"OIDCFacebookConfigured":    facebookConfigured,
-		"OIDCAnyProviderConfigured": anyProviderConfigured,
-	}, http.StatusOK)
+	app.render(w, r, "login.html", app.oidcAuthPageData(r), http.StatusOK)
 }
 
 func (app *Application) signupPage(w http.ResponseWriter, r *http.Request) {
-	oidcEnabled, err := app.siteConfigEnabled(r.Context(), "oidc_enabled", true)
+	app.render(w, r, "signup.html", app.oidcAuthPageData(r), http.StatusOK)
+}
+
+func (app *Application) oidcAuthPageData(r *http.Request) map[string]any {
+	oidcEnabled, err := app.siteConfigEnabled(r.Context(), "oidc_enabled")
 	if err != nil {
 		oidcEnabled = true
 	}
-	oidcLoginEnabled, err := app.siteConfigEnabled(r.Context(), "oidc_login_enabled", true)
+	oidcLoginEnabled, err := app.siteConfigEnabled(r.Context(), "oidc_login_enabled")
 	if err != nil {
 		oidcLoginEnabled = true
 	}
-	providers := app.oidcProviders()
-	googleConfigured := providers["google"].ClientID != "" && providers["google"].Secret != ""
-	appleConfigured := providers["apple"].ClientID != "" && providers["apple"].Secret != ""
-	facebookConfigured := providers["facebook"].ClientID != "" && providers["facebook"].Secret != ""
-	anyProviderConfigured := googleConfigured || appleConfigured || facebookConfigured
 
-	app.render(w, r, "signup.html", map[string]any{
+	providers := app.oidcProviders()
+	googleConfigured := providers[oidcProviderGoogle].ClientID != "" &&
+		providers[oidcProviderGoogle].ClientSecret != ""
+	appleConfigured := providers[oidcProviderApple].ClientID != "" &&
+		providers[oidcProviderApple].ClientSecret != ""
+	facebookConfigured := providers[oidcProviderFacebook].ClientID != "" &&
+		providers[oidcProviderFacebook].ClientSecret != ""
+
+	return map[string]any{
 		isAuthenticatedKey:          app.contextGetUser(r) != nil,
 		"OIDCEnabled":               oidcEnabled,
 		"OIDCLoginEnabled":          oidcLoginEnabled,
@@ -214,8 +198,8 @@ func (app *Application) signupPage(w http.ResponseWriter, r *http.Request) {
 		"OIDCGoogleConfigured":      googleConfigured,
 		"OIDCAppleConfigured":       appleConfigured,
 		"OIDCFacebookConfigured":    facebookConfigured,
-		"OIDCAnyProviderConfigured": anyProviderConfigured,
-	}, http.StatusOK)
+		"OIDCAnyProviderConfigured": googleConfigured || appleConfigured || facebookConfigured,
+	}
 }
 
 func (app *Application) microBlog(w http.ResponseWriter, r *http.Request) {

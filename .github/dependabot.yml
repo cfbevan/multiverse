@@ -5,6 +5,10 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    groups:
+      gomod-all:
+        patterns:
+          - "*"
     labels:
       - "dependencies"
       - "go"
@@ -14,6 +18,10 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    groups:
+      github-actions-all:
+        patterns:
+          - "*"
     labels:
       - "dependencies"
       - "ci"
