@@ -28,41 +28,41 @@ import (
 
 // Config contains the server configuration loaded from environment variables.
 type Config struct {
-	Debug               bool   `env:"DEBUG"                   envDefault:"false"`
-	Port                int    `env:"PORT"                    envDefault:"8080"`
-	Env                 string `env:"ENV"                     envDefault:"dev"`
-	DatabaseDSN         string `env:"DATABASE_DSN"            envDefault:"postgres://multiverse:multiverse@localhost:5432/multiverse?sslmode=disable"`
-	DatabaseMaxOpenConn int    `env:"DATABASE_MAX_OPEN_CONNS" envDefault:"25"`
-	DatabaseMaxIdleConn int    `env:"DATABASE_MAX_IDLE_CONNS" envDefault:"25"`
-	DatabaseMaxIdleTime string `env:"DATABASE_MAX_IDLE_TIME"  envDefault:"15m"`
-	JWTSecret           string `env:"JWT_SECRET"              envDefault:"replace-me"`
-	ActivityPubBaseURL  string `env:"ACTIVITYPUB_BASE_URL"    envDefault:"http://localhost:8080"`
-	ActivityPubDomain   string `env:"ACTIVITYPUB_DOMAIN"      envDefault:"localhost"`
-	StorageEndpoint     string `env:"STORAGE_ENDPOINT"        envDefault:"http://localhost:9000"`
-	StorageBucket       string `env:"STORAGE_BUCKET"          envDefault:"multiverse"`
-	StorageRegion       string `env:"STORAGE_REGION"          envDefault:"us-east-1"`
-	StorageAccessKey    string `env:"STORAGE_ACCESS_KEY"      envDefault:"minioadmin"`
-	StorageSecretKey    string `env:"STORAGE_SECRET_KEY"      envDefault:"minioadmin"`
-	StorageUseSSL       bool   `env:"STORAGE_USE_SSL"         envDefault:"false"`
-	OIDCIssuerURL       string `env:"OIDC_ISSUER_URL"         envDefault:""`
-	OIDCClientID        string `env:"OIDC_CLIENT_ID"          envDefault:""`
-	OIDCClientSecret    string `env:"OIDC_CLIENT_SECRET"      envDefault:""`
-	OIDCRedirectURL     string `env:"OIDC_REDIRECT_URL"       envDefault:"http://localhost:8080/v1/auth/oidc/callback"`
-	OIDCGoogleClientID  string `env:"OIDC_GOOGLE_CLIENT_ID"   envDefault:""`
+	Debug               bool   `env:"DEBUG"                     envDefault:"false"`
+	Port                int    `env:"PORT"                      envDefault:"8080"`
+	Env                 string `env:"ENV"                       envDefault:"dev"`
+	DatabaseDSN         string `env:"DATABASE_DSN"              envDefault:"postgres://multiverse:multiverse@localhost:5432/multiverse?sslmode=disable"`
+	DatabaseMaxOpenConn int    `env:"DATABASE_MAX_OPEN_CONNS"   envDefault:"25"`
+	DatabaseMaxIdleConn int    `env:"DATABASE_MAX_IDLE_CONNS"   envDefault:"25"`
+	DatabaseMaxIdleTime string `env:"DATABASE_MAX_IDLE_TIME"    envDefault:"15m"`
+	JWTSecret           string `env:"JWT_SECRET"                envDefault:"replace-me"`
+	ActivityPubBaseURL  string `env:"ACTIVITYPUB_BASE_URL"      envDefault:"http://localhost:8080"`
+	ActivityPubDomain   string `env:"ACTIVITYPUB_DOMAIN"        envDefault:"localhost"`
+	StorageEndpoint     string `env:"STORAGE_ENDPOINT"          envDefault:"http://localhost:9000"`
+	StorageBucket       string `env:"STORAGE_BUCKET"            envDefault:"multiverse"`
+	StorageRegion       string `env:"STORAGE_REGION"            envDefault:"us-east-1"`
+	StorageAccessKey    string `env:"STORAGE_ACCESS_KEY"        envDefault:"minioadmin"`
+	StorageSecretKey    string `env:"STORAGE_SECRET_KEY"        envDefault:"minioadmin"`
+	StorageUseSSL       bool   `env:"STORAGE_USE_SSL"           envDefault:"false"`
+	OIDCIssuerURL       string `env:"OIDC_ISSUER_URL"           envDefault:""`
+	OIDCClientID        string `env:"OIDC_CLIENT_ID"            envDefault:""`
+	OIDCClientSecret    string `env:"OIDC_CLIENT_SECRET"        envDefault:""`
+	OIDCRedirectURL     string `env:"OIDC_REDIRECT_URL"         envDefault:"http://localhost:8080/v1/auth/oidc/callback"`
+	OIDCGoogleClientID  string `env:"OIDC_GOOGLE_CLIENT_ID"     envDefault:""`
 	OIDCGoogleSecret    string `env:"OIDC_GOOGLE_CLIENT_SECRET" envDefault:""`
-	OIDCAppleClientID   string `env:"OIDC_APPLE_CLIENT_ID"    envDefault:""`
-	OIDCAppleSecret     string `env:"OIDC_APPLE_CLIENT_SECRET" envDefault:""`
-	OIDCFacebookAppID   string `env:"OIDC_FACEBOOK_APP_ID"    envDefault:""`
-	OIDCFacebookSecret  string `env:"OIDC_FACEBOOK_APP_SECRET" envDefault:""`
-	SMTPHost            string `env:"SMTP_HOST"               envDefault:""`
-	SMTPPort            int    `env:"SMTP_PORT"               envDefault:"587"`
-	SMTPUsername        string `env:"SMTP_USERNAME"           envDefault:""`
-	SMTPPassword        string `env:"SMTP_PASSWORD"           envDefault:""`
-	SMTPFrom            string `env:"SMTP_FROM"               envDefault:""`
-	InboxMaxDateSkewSec int    `env:"INBOX_MAX_DATE_SKEW_SEC" envDefault:"300"`
-	InboxMaxBodyBytes   int64  `env:"INBOX_MAX_BODY_BYTES"    envDefault:"1048576"`
-	InboxRequireHost    bool   `env:"INBOX_REQUIRE_HOST"      envDefault:"true"`
-	OutboxPollSec       int    `env:"OUTBOX_POLL_SEC"         envDefault:"5"`
+	OIDCAppleClientID   string `env:"OIDC_APPLE_CLIENT_ID"      envDefault:""`
+	OIDCAppleSecret     string `env:"OIDC_APPLE_CLIENT_SECRET"  envDefault:""`
+	OIDCFacebookAppID   string `env:"OIDC_FACEBOOK_APP_ID"      envDefault:""`
+	OIDCFacebookSecret  string `env:"OIDC_FACEBOOK_APP_SECRET"  envDefault:""`
+	SMTPHost            string `env:"SMTP_HOST"                 envDefault:""`
+	SMTPPort            int    `env:"SMTP_PORT"                 envDefault:"587"`
+	SMTPUsername        string `env:"SMTP_USERNAME"             envDefault:""`
+	SMTPPassword        string `env:"SMTP_PASSWORD"             envDefault:""`
+	SMTPFrom            string `env:"SMTP_FROM"                 envDefault:""`
+	InboxMaxDateSkewSec int    `env:"INBOX_MAX_DATE_SKEW_SEC"   envDefault:"300"`
+	InboxMaxBodyBytes   int64  `env:"INBOX_MAX_BODY_BYTES"      envDefault:"1048576"`
+	InboxRequireHost    bool   `env:"INBOX_REQUIRE_HOST"        envDefault:"true"`
+	OutboxPollSec       int    `env:"OUTBOX_POLL_SEC"           envDefault:"5"`
 }
 
 // Application stores the shared dependencies for the HTTP UI and API server.
@@ -198,50 +198,6 @@ func newStorageClient(cfg Config) (*minio.Client, error) {
 	return client, nil
 }
 
-func (app *Application) ensureStorageBucket(ctx context.Context, bucket string) error {
-	if app.storageClient == nil {
-		return errors.New("object storage is not configured")
-	}
-	if bucket == "" {
-		bucket = app.config.StorageBucket
-	}
-
-	exists, err := app.storageClient.BucketExists(ctx, bucket)
-	if err == nil && exists {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-
-	if err := app.storageClient.MakeBucket(ctx, bucket, minio.MakeBucketOptions{Region: app.config.StorageRegion}); err != nil {
-		if strings.Contains(err.Error(), "BucketAlreadyExists") || strings.Contains(err.Error(), "BucketAlreadyOwnedByYou") {
-			return nil
-		}
-		return err
-	}
-
-	return nil
-}
-
-func (app *Application) uploadMediaFile(ctx context.Context, bucket, objectKey, mediaType string, contents []byte) error {
-	if err := app.ensureStorageBucket(ctx, bucket); err != nil {
-		return err
-	}
-	if len(contents) == 0 {
-		return errors.New("upload contents are empty")
-	}
-	_, err := app.storageClient.PutObject(
-		ctx,
-		bucket,
-		objectKey,
-		bytes.NewReader(contents),
-		int64(len(contents)),
-		minio.PutObjectOptions{ContentType: mediaType},
-	)
-	return err
-}
-
 // Serve starts the HTTP server and waits for shutdown or termination signals.
 func (app *Application) Serve() error {
 	srv := &http.Server{
@@ -306,4 +262,59 @@ func (app *Application) Serve() error {
 	app.logger.Info("stopped server", "addr", srv.Addr)
 
 	return nil
+}
+
+func (app *Application) ensureStorageBucket(ctx context.Context, bucket string) error {
+	if app.storageClient == nil {
+		return errors.New("object storage is not configured")
+	}
+	if bucket == "" {
+		bucket = app.config.StorageBucket
+	}
+
+	exists, err := app.storageClient.BucketExists(ctx, bucket)
+	if err == nil && exists {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	if err := app.storageClient.MakeBucket(
+		ctx,
+		bucket,
+		minio.MakeBucketOptions{Region: app.config.StorageRegion},
+	); err != nil {
+		if strings.Contains(err.Error(), "BucketAlreadyExists") ||
+			strings.Contains(err.Error(), "BucketAlreadyOwnedByYou") {
+			return nil
+		}
+
+		return err
+	}
+
+	return nil
+}
+
+func (app *Application) uploadMediaFile(
+	ctx context.Context,
+	bucket, objectKey, mediaType string,
+	contents []byte,
+) error {
+	if err := app.ensureStorageBucket(ctx, bucket); err != nil {
+		return err
+	}
+	if len(contents) == 0 {
+		return errors.New("upload contents are empty")
+	}
+	_, err := app.storageClient.PutObject(
+		ctx,
+		bucket,
+		objectKey,
+		bytes.NewReader(contents),
+		int64(len(contents)),
+		minio.PutObjectOptions{ContentType: mediaType},
+	)
+
+	return err
 }

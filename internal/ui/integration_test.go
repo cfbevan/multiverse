@@ -1046,6 +1046,9 @@ func checkOutboxContainsTypes(t *testing.T, srv *httptest.Server, handle string)
 	}
 }
 
+// TestIntegrationAudioAndPictureUploadToMinio verifies media uploads persist in MinIO.
+//
+//nolint:gocognit // end-to-end upload assertions intentionally exercise many branches.
 func TestIntegrationAudioAndPictureUploadToMinio(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test skipped in short mode")
@@ -1091,12 +1094,14 @@ func TestIntegrationAudioAndPictureUploadToMinio(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(pictureFragment), `/pictures/`) || !strings.Contains(string(pictureFragment), `/preview`) {
+	if !strings.Contains(string(pictureFragment), `/pictures/`) ||
+		!strings.Contains(string(pictureFragment), `/preview`) {
 		t.Fatalf("picture create response missing preview image path")
 	}
 
 	var pictureBucket, pictureKey, pictureFilename string
-	if err := db.QueryRow(`SELECT bucket, object_key, original_filename FROM media_assets WHERE owner_actor_id = $1 ORDER BY id DESC LIMIT 1`, actorID).Scan(&pictureBucket, &pictureKey, &pictureFilename); err != nil {
+	if err := db.QueryRow(`SELECT bucket, object_key, original_filename FROM media_assets WHERE owner_actor_id = $1 ORDER BY id DESC LIMIT 1`, actorID).
+		Scan(&pictureBucket, &pictureKey, &pictureFilename); err != nil {
 		t.Fatal(err)
 	}
 	if pictureBucket != "pictures" {
@@ -1105,7 +1110,12 @@ func TestIntegrationAudioAndPictureUploadToMinio(t *testing.T) {
 	if pictureFilename != "photo.png" {
 		t.Fatalf("picture filename = %q, want %q", pictureFilename, "photo.png")
 	}
-	if obj, err := client.GetObject(ctx, pictureBucket, pictureKey, minio.GetObjectOptions{}); err != nil {
+	if obj, err := client.GetObject(
+		ctx,
+		pictureBucket,
+		pictureKey,
+		minio.GetObjectOptions{},
+	); err != nil {
 		t.Fatalf("picture object missing from minio: %v", err)
 	} else {
 		defer func() { _ = obj.Close() }()
@@ -1137,7 +1147,8 @@ func TestIntegrationAudioAndPictureUploadToMinio(t *testing.T) {
 	requireFragmentContains(t, string(audioFragment), "<audio", "/audio/", "/preview")
 
 	var audioBucket, audioKey, audioFilename string
-	if err := db.QueryRow(`SELECT ma.bucket, ma.object_key, ma.original_filename FROM audio_posts ap JOIN media_assets ma ON ma.id = ap.media_asset_id WHERE ap.actor_id = $1 ORDER BY ap.id DESC LIMIT 1`, actorID).Scan(&audioBucket, &audioKey, &audioFilename); err != nil {
+	if err := db.QueryRow(`SELECT ma.bucket, ma.object_key, ma.original_filename FROM audio_posts ap JOIN media_assets ma ON ma.id = ap.media_asset_id WHERE ap.actor_id = $1 ORDER BY ap.id DESC LIMIT 1`, actorID).
+		Scan(&audioBucket, &audioKey, &audioFilename); err != nil {
 		t.Fatal(err)
 	}
 	if audioBucket != "audio" {
@@ -1146,7 +1157,12 @@ func TestIntegrationAudioAndPictureUploadToMinio(t *testing.T) {
 	if audioFilename != "track.mp3" {
 		t.Fatalf("audio filename = %q, want %q", audioFilename, "track.mp3")
 	}
-	if obj, err := client.GetObject(ctx, audioBucket, audioKey, minio.GetObjectOptions{}); err != nil {
+	if obj, err := client.GetObject(
+		ctx,
+		audioBucket,
+		audioKey,
+		minio.GetObjectOptions{},
+	); err != nil {
 		t.Fatalf("audio object missing from minio: %v", err)
 	} else {
 		defer func() { _ = obj.Close() }()
@@ -1190,14 +1206,21 @@ func newIntegrationApp(t *testing.T) *Application {
 func mustActorID(t *testing.T, db *sql.DB, handle string) int64 {
 	t.Helper()
 	var actorID int64
-	if err := db.QueryRow(`SELECT id FROM actors WHERE handle = $1`, handle).Scan(&actorID); err != nil {
+	if err := db.QueryRow(`SELECT id FROM actors WHERE handle = $1`, handle).
+		Scan(&actorID); err != nil {
 		t.Fatal(err)
 	}
 
 	return actorID
 }
 
-func multipartUploadRequest(t *testing.T, url string, values map[string]string, fileName, contentType string, contents []byte) *http.Request {
+func multipartUploadRequest(
+	t *testing.T,
+	url string,
+	values map[string]string,
+	fileName, contentType string,
+	contents []byte,
+) *http.Request {
 	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)

@@ -61,13 +61,13 @@ func (app *Application) registerAccount(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := app.writeJSON(w, http.StatusCreated, envelope{
-		"user": envelope{
+		userKey: envelope{
 			"id":           user.ID,
 			emailKey:       user.Email,
 			handleKey:      user.Handle,
 			displayNameKey: user.DisplayName,
-			"bio":          user.Bio,
-			"is_admin":     user.IsAdmin,
+			bioKey:         user.Bio,
+			isAdminKey:     user.IsAdmin,
 		},
 		"token": token,
 	}, nil); err != nil {
@@ -158,7 +158,7 @@ func (app *Application) createRegistrationUser(
 	ctx, cancel := context.WithTimeout(ctx, defaultRequestTimeout)
 	defer cancel()
 
-	signupsEnabled, err := app.siteConfigEnabled(ctx, "signup_enabled", true)
+	signupsEnabled, err := app.siteConfigEnabled(ctx, "signup_enabled")
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 

@@ -274,7 +274,7 @@ func (app *Application) requireSiteSectionEnabled(
 	r *http.Request,
 	key string,
 ) bool {
-	enabled, err := app.siteConfigEnabled(r.Context(), key, true)
+	enabled, err := app.siteConfigEnabled(r.Context(), key)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 

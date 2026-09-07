@@ -192,7 +192,12 @@ func (app *Application) streamPostMediaPreview(
 		return
 	}
 
-	canView, err := app.canViewContentVisibility(ctx, ownerActorID, visibility, app.contextGetUser(r))
+	canView, err := app.canViewContentVisibility(
+		ctx,
+		ownerActorID,
+		visibility,
+		app.contextGetUser(r),
+	)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 
@@ -224,7 +229,7 @@ func (app *Application) streamPostMediaPreview(
 		contentType = strings.TrimSpace(info.ContentType)
 	}
 	if contentType == "" {
-		contentType = "application/octet-stream"
+		contentType = defaultMediaType
 	}
 
 	w.Header().Set("Content-Type", contentType)
@@ -758,6 +763,7 @@ func (app *Application) createPicturePostHTMX(w http.ResponseWriter, r *http.Req
 	app.renderFragment(w, r, http.StatusCreated, "pictures.html", "pictureCard", post)
 }
 
+//nolint:gocognit // multipart validation and creation flow has multiple explicit guard branches.
 func (app *Application) createVideoPostHTMX(w http.ResponseWriter, r *http.Request) {
 	if !app.requireSiteSectionEnabled(w, r, "videos_enabled") {
 		return
@@ -846,19 +852,21 @@ func (app *Application) createVideoPostHTMX(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		if errors.Is(err, models.ErrRecordNotFound) {
 			app.clientError(w, http.StatusUnauthorized)
+
 			return
 		}
 		app.serverError(w, r, err)
+
 		return
 	}
 
 	mediaType := strings.TrimSpace(upload.FileContentType)
 	if mediaType == "" {
-		mediaType = "application/octet-stream"
+		mediaType = defaultMediaType
 	}
 	originalFilename := strings.TrimSpace(upload.FileName)
 	if originalFilename == "" {
-		originalFilename = "upload.bin"
+		originalFilename = defaultUploadFilename
 	}
 
 	objectKey := fmt.Sprintf(
@@ -870,6 +878,7 @@ func (app *Application) createVideoPostHTMX(w http.ResponseWriter, r *http.Reque
 	isPublic := visibility == models.VisibilityPublic || visibility == models.VisibilityUnlisted
 	if err := app.uploadMediaFile(ctx, "video", objectKey, mediaType, upload.FileData); err != nil {
 		app.serverError(w, r, err)
+
 		return
 	}
 
@@ -899,6 +908,7 @@ func (app *Application) createVideoPostHTMX(w http.ResponseWriter, r *http.Reque
 		isPublic,
 	).Scan(&mediaAssetID); err != nil {
 		app.serverError(w, r, err)
+
 		return
 	}
 
@@ -929,6 +939,7 @@ func (app *Application) createVideoPostHTMX(w http.ResponseWriter, r *http.Reque
 		post.APObjectID,
 	).Scan(&post.ID, &post.PublishedAt, &post.UpdatedAt, &post.Version); err != nil {
 		app.serverError(w, r, err)
+
 		return
 	}
 
@@ -1183,11 +1194,11 @@ func (app *Application) createPicturePostFromUpload(
 ) (*models.PicturePost, error) {
 	mediaType := strings.TrimSpace(upload.FileContentType)
 	if mediaType == "" {
-		mediaType = "application/octet-stream"
+		mediaType = defaultMediaType
 	}
 	originalFilename := strings.TrimSpace(upload.FileName)
 	if originalFilename == "" {
-		originalFilename = "upload.bin"
+		originalFilename = defaultUploadFilename
 	}
 
 	objectKey := fmt.Sprintf(
@@ -1198,7 +1209,13 @@ func (app *Application) createPicturePostFromUpload(
 	)
 	isPublic := visibility == models.VisibilityPublic || visibility == models.VisibilityUnlisted
 
-	if err := app.uploadMediaFile(ctx, "pictures", objectKey, mediaType, upload.FileData); err != nil {
+	if err := app.uploadMediaFile(
+		ctx,
+		"pictures",
+		objectKey,
+		mediaType,
+		upload.FileData,
+	); err != nil {
 		return nil, err
 	}
 
@@ -1348,34 +1365,22 @@ func (app *Application) loadMicroPostByID(
 	ctx context.Context,
 	idString string,
 ) (*models.MicroPost, error) {
-	id, err := strconv.ParseInt(idString, 10, 64)
-	if err != nil || id <= 0 {
-		return nil, models.ErrRecordNotFound
-	}
-	row := app.db.QueryRowContext(ctx, `
+	return app.loadGenericByID(ctx, idString, `
 		SELECT id, actor_id, content, visibility, reply_to_micro_post_id, ap_object_id, published_at, updated_at, deleted_at, version
-		FROM micro_posts WHERE id = $1 AND deleted_at IS NULL`, id)
-	var post models.MicroPost
-	if err := row.Scan(
-		&post.ID,
-		&post.ActorID,
-		&post.Content,
-		&post.Visibility,
-		&post.ReplyToMicroPostID,
-		&post.APObjectID,
-		&post.PublishedAt,
-		&post.UpdatedAt,
-		&post.DeletedAt,
-		&post.Version,
-	); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, models.ErrRecordNotFound
-		}
-
-		return nil, err
-	}
-
-	return &post, nil
+		FROM micro_posts WHERE id = $1 AND deleted_at IS NULL`, func(row *sql.Row, post *models.MicroPost) error {
+		return row.Scan(
+			&post.ID,
+			&post.ActorID,
+			&post.Content,
+			&post.Visibility,
+			&post.ReplyToMicroPostID,
+			&post.APObjectID,
+			&post.PublishedAt,
+			&post.UpdatedAt,
+			&post.DeletedAt,
+			&post.Version,
+		)
+	})
 }
 
 func (app *Application) loadGenericByID[T any](
@@ -1406,12 +1411,9 @@ func (app *Application) loadPicturePostByID(
 	ctx context.Context,
 	idString string,
 ) (*models.PicturePost, error) {
-	id, err := strconv.ParseInt(idString, 10, 64)
-	if err != nil || id <= 0 {
-		return nil, models.ErrRecordNotFound
-	}
-	row := app.db.QueryRowContext(
+	return app.loadGenericByID(
 		ctx,
+		idString,
 		`SELECT pp.id, pp.actor_id, pp.caption, pp.visibility,
 		EXISTS (
 			SELECT 1
@@ -1422,27 +1424,19 @@ func (app *Application) loadPicturePostByID(
 		pp.ap_object_id, pp.published_at, pp.updated_at, pp.deleted_at, pp.version
 		FROM picture_posts pp
 		WHERE pp.id = $1 AND pp.deleted_at IS NULL`,
-		id,
+		func(row *sql.Row, post *models.PicturePost) error {
+			return row.Scan(
+				&post.ID,
+				&post.ActorID,
+				&post.Caption,
+				&post.Visibility,
+				&post.HasPreview,
+				&post.APObjectID,
+				&post.PublishedAt,
+				&post.UpdatedAt,
+				&post.DeletedAt,
+				&post.Version,
+			)
+		},
 	)
-	var post models.PicturePost
-	if err := row.Scan(
-		&post.ID,
-		&post.ActorID,
-		&post.Caption,
-		&post.Visibility,
-		&post.HasPreview,
-		&post.APObjectID,
-		&post.PublishedAt,
-		&post.UpdatedAt,
-		&post.DeletedAt,
-		&post.Version,
-	); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, models.ErrRecordNotFound
-		}
-
-		return nil, err
-	}
-
-	return &post, nil
 }

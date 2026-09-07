@@ -23,6 +23,17 @@ import (
 const (
 	defaultRequestTimeout = 3 * time.Second
 	oidcStateCookieName   = "mv_oidc_state"
+	oidcStateCookieMaxAge = 300
+	defaultMediaType      = "application/octet-stream"
+	defaultUploadFilename = "upload.bin"
+	oidcProviderGoogle    = "google"
+	oidcProviderApple     = "apple"
+	oidcProviderFacebook  = "facebook"
+	jwtPartsCount         = 3
+	oidcHandleMinLength   = 3
+	oidcHandleSuffixMod   = 10000
+	oidcHandleSuffixWidth = 4
+	userHandleFallback    = "user"
 	statusKey             = "status"
 	themePresetKey        = "theme_preset"
 	descriptionKey        = "description"
@@ -66,14 +77,14 @@ const (
 var handleSanitizeRegex = regexp.MustCompile(`[^a-z0-9]+`)
 
 type oidcProvider struct {
-	Key         string
-	Name        string
-	AuthURL     string
-	TokenURL    string
-	UserInfoURL string
-	ClientID    string
-	Secret      string
-	Scope       string
+	Key          string
+	Name         string
+	AuthURL      string
+	TokenURL     string
+	UserInfoURL  string
+	ClientID     string
+	ClientSecret string
+	Scope        string
 }
 
 type oidcProviderStatus struct {
@@ -194,7 +205,7 @@ func (app *Application) requestPasswordResetEmail(w http.ResponseWriter, r *http
 	ctx, cancel := context.WithTimeout(r.Context(), defaultRequestTimeout)
 	defer cancel()
 
-	enabled, err := app.siteConfigEnabled(ctx, "password_reset_enabled", true)
+	enabled, err := app.siteConfigEnabled(ctx, "password_reset_enabled")
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 
@@ -476,12 +487,11 @@ func (app *Application) currentAccountPayload(
 func (app *Application) siteConfigEnabled(
 	ctx context.Context,
 	key string,
-	fallback bool,
 ) (bool, error) {
 	config, err := app.siteConfigs.GetByKey(ctx, key)
 	if err != nil {
 		if errors.Is(err, models.ErrRecordNotFound) {
-			return fallback, nil
+			return true, nil
 		}
 
 		return false, err
@@ -491,7 +501,7 @@ func (app *Application) siteConfigEnabled(
 }
 
 func (app *Application) oidcLogin(w http.ResponseWriter, r *http.Request) {
-	enabled, err := app.siteConfigEnabled(r.Context(), "oidc_enabled", true)
+	enabled, err := app.siteConfigEnabled(r.Context(), "oidc_enabled")
 	if err != nil || !enabled {
 		app.notPermittedResponse(w, r)
 
@@ -499,7 +509,7 @@ func (app *Application) oidcLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	providerKey := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("provider")))
 	if providerKey == "" {
-		providerKey = "google"
+		providerKey = oidcProviderGoogle
 	}
 
 	provider, ok := app.oidcProviders()[providerKey]
@@ -508,8 +518,13 @@ func (app *Application) oidcLogin(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
-	if strings.TrimSpace(provider.ClientID) == "" || strings.TrimSpace(provider.Secret) == "" {
-		app.badRequestResponse(w, r, fmt.Errorf("oidc provider %q is not configured", provider.Name))
+	if strings.TrimSpace(provider.ClientID) == "" ||
+		strings.TrimSpace(provider.ClientSecret) == "" {
+		app.badRequestResponse(
+			w,
+			r,
+			fmt.Errorf("oidc provider %q is not configured", provider.Name),
+		)
 
 		return
 	}
@@ -526,9 +541,9 @@ func (app *Application) oidcLogin(w http.ResponseWriter, r *http.Request) {
 		Value:    state,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   app.config.StorageUseSSL,
+		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
-		MaxAge:   300,
+		MaxAge:   oidcStateCookieMaxAge,
 	})
 
 	params := url.Values{}
@@ -542,7 +557,7 @@ func (app *Application) oidcLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *Application) oidcCallback(w http.ResponseWriter, r *http.Request) {
-	enabled, err := app.siteConfigEnabled(r.Context(), "oidc_enabled", true)
+	enabled, err := app.siteConfigEnabled(r.Context(), "oidc_enabled")
 	if err != nil || !enabled {
 		app.notPermittedResponse(w, r)
 
@@ -583,7 +598,7 @@ func (app *Application) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   app.config.StorageUseSSL,
+		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})
@@ -611,7 +626,11 @@ func (app *Application) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := app.findOrCreateOIDCUser(ctx, strings.ToLower(strings.TrimSpace(email)), displayName)
+	user, err := app.findOrCreateOIDCUser(
+		ctx,
+		strings.ToLower(strings.TrimSpace(email)),
+		displayName,
+	)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 
@@ -625,55 +644,63 @@ func (app *Application) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	html, err := app.oidcCallbackHTML(token, user)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(app.oidcCallbackHTML(token, user)))
+	_, _ = w.Write([]byte(html))
 }
 
 func (app *Application) oidcProviders() map[string]oidcProvider {
+	// #nosec G101 -- provider client secrets are sourced from environment variables.
 	return map[string]oidcProvider{
-		"google": {
-			Key:         "google",
-			Name:        "Google",
-			AuthURL:     "https://accounts.google.com/o/oauth2/v2/auth",
-			TokenURL:    "https://oauth2.googleapis.com/token",
-			UserInfoURL: "https://openidconnect.googleapis.com/v1/userinfo",
-			ClientID:    strings.TrimSpace(app.config.OIDCGoogleClientID),
-			Secret:      strings.TrimSpace(app.config.OIDCGoogleSecret),
-			Scope:       "openid email profile",
+		oidcProviderGoogle: {
+			Key:          oidcProviderGoogle,
+			Name:         "Google",
+			AuthURL:      "https://accounts.google.com/o/oauth2/v2/auth",
+			TokenURL:     "https://oauth2.googleapis.com/token",
+			UserInfoURL:  "https://openidconnect.googleapis.com/v1/userinfo",
+			ClientID:     strings.TrimSpace(app.config.OIDCGoogleClientID),
+			ClientSecret: strings.TrimSpace(app.config.OIDCGoogleSecret),
+			Scope:        "openid email profile",
 		},
-		"apple": {
-			Key:         "apple",
-			Name:        "Apple",
-			AuthURL:     "https://appleid.apple.com/auth/authorize",
-			TokenURL:    "https://appleid.apple.com/auth/token",
-			UserInfoURL: "",
-			ClientID:    strings.TrimSpace(app.config.OIDCAppleClientID),
-			Secret:      strings.TrimSpace(app.config.OIDCAppleSecret),
-			Scope:       "name email",
+		oidcProviderApple: {
+			Key:          oidcProviderApple,
+			Name:         "Apple",
+			AuthURL:      "https://appleid.apple.com/auth/authorize",
+			TokenURL:     "https://appleid.apple.com/auth/token",
+			UserInfoURL:  "",
+			ClientID:     strings.TrimSpace(app.config.OIDCAppleClientID),
+			ClientSecret: strings.TrimSpace(app.config.OIDCAppleSecret),
+			Scope:        "name email",
 		},
-		"facebook": {
-			Key:         "facebook",
-			Name:        "Facebook",
-			AuthURL:     "https://www.facebook.com/v20.0/dialog/oauth",
-			TokenURL:    "https://graph.facebook.com/v20.0/oauth/access_token",
-			UserInfoURL: "https://graph.facebook.com/me?fields=id,name,email",
-			ClientID:    strings.TrimSpace(app.config.OIDCFacebookAppID),
-			Secret:      strings.TrimSpace(app.config.OIDCFacebookSecret),
-			Scope:       "public_profile,email",
+		oidcProviderFacebook: {
+			Key:          oidcProviderFacebook,
+			Name:         "Facebook",
+			AuthURL:      "https://www.facebook.com/v20.0/dialog/oauth",
+			TokenURL:     "https://graph.facebook.com/v20.0/oauth/access_token",
+			UserInfoURL:  "https://graph.facebook.com/me?fields=id,name,email",
+			ClientID:     strings.TrimSpace(app.config.OIDCFacebookAppID),
+			ClientSecret: strings.TrimSpace(app.config.OIDCFacebookSecret),
+			Scope:        "public_profile,email",
 		},
 	}
 }
 
 func (app *Application) oidcProviderStatuses() []oidcProviderStatus {
 	providers := app.oidcProviders()
-	ordered := []string{"google", "apple", "facebook"}
+	ordered := []string{oidcProviderGoogle, oidcProviderApple, oidcProviderFacebook}
 	statuses := make([]oidcProviderStatus, 0, len(ordered))
 	for _, key := range ordered {
 		provider := providers[key]
 		statuses = append(statuses, oidcProviderStatus{
 			Name:             provider.Name,
 			ClientIDSet:      provider.ClientID != "",
-			SecretSet:        provider.Secret != "",
+			SecretSet:        provider.ClientSecret != "",
 			RedirectURL:      app.oidcRedirectURL(provider.Key),
 			AuthEndpoint:     provider.AuthURL,
 			TokenEndpoint:    provider.TokenURL,
@@ -716,7 +743,7 @@ func (app *Application) exchangeOIDCCode(
 	data.Set("code", code)
 	data.Set("redirect_uri", app.oidcRedirectURL(provider.Key))
 	data.Set("client_id", provider.ClientID)
-	data.Set("client_secret", provider.Secret)
+	data.Set("client_secret", provider.ClientSecret)
 
 	req, err := http.NewRequestWithContext(
 		ctx,
@@ -796,7 +823,7 @@ func (app *Application) fetchOIDCProfile(
 
 func oidcIdentityFromIDToken(idToken string) (string, string) {
 	parts := strings.Split(idToken, ".")
-	if len(parts) != 3 {
+	if len(parts) != jwtPartsCount {
 		return "", ""
 	}
 
@@ -816,6 +843,7 @@ func oidcIdentityFromIDToken(idToken string) (string, string) {
 	return strings.TrimSpace(email), strings.TrimSpace(name)
 }
 
+//nolint:gocognit // user lookup/create flow handles several expected branches.
 func (app *Application) findOrCreateOIDCUser(
 	ctx context.Context,
 	email string,
@@ -829,7 +857,7 @@ func (app *Application) findOrCreateOIDCUser(
 		return nil, err
 	}
 
-	signupsEnabled, err := app.siteConfigEnabled(ctx, "signup_enabled", true)
+	signupsEnabled, err := app.siteConfigEnabled(ctx, "signup_enabled")
 	if err != nil {
 		return nil, err
 	}
@@ -862,7 +890,7 @@ func (app *Application) findOrCreateOIDCUser(
 
 	if err := app.users.Insert(ctx, newUser); err != nil {
 		if errors.Is(err, models.ErrDuplicateHandle) {
-			newUser.Handle = fmt.Sprintf("%s%d", handle, time.Now().Unix()%10000)
+			newUser.Handle = fmt.Sprintf("%s%d", handle, time.Now().Unix()%oidcHandleSuffixMod)
 			if err := app.users.Insert(ctx, newUser); err != nil {
 				return nil, err
 			}
@@ -887,25 +915,28 @@ func generateOIDCHandle(email string) string {
 		base = base[:idx]
 	}
 	base = handleSanitizeRegex.ReplaceAllString(base, "")
-	if len(base) < 3 {
-		base = "user"
+	if len(base) < oidcHandleMinLength {
+		base = userHandleFallback
 	}
-	if len(base) > maxHandleLength-5 {
-		base = base[:maxHandleLength-5]
+	if len(base) > maxHandleLength-oidcHandleSuffixWidth-1 {
+		base = base[:maxHandleLength-oidcHandleSuffixWidth-1]
 	}
 
-	return fmt.Sprintf("%s%04d", base, time.Now().Unix()%10000)
+	return fmt.Sprintf("%s%0*d", base, oidcHandleSuffixWidth, time.Now().Unix()%oidcHandleSuffixMod)
 }
 
-func (app *Application) oidcCallbackHTML(token string, user *models.User) string {
-	userJSON, _ := json.Marshal(map[string]any{
+func (app *Application) oidcCallbackHTML(token string, user *models.User) (string, error) {
+	userJSON, err := json.Marshal(map[string]any{
 		"id":           user.ID,
 		"email":        user.Email,
 		"handle":       user.Handle,
 		"display_name": user.DisplayName,
-		"bio":          user.Bio,
-		"is_admin":     user.IsAdmin,
+		bioKey:         user.Bio,
+		isAdminKey:     user.IsAdmin,
 	})
+	if err != nil {
+		return "", err
+	}
 
 	return fmt.Sprintf(`<!doctype html>
 <html lang="en">
@@ -917,7 +948,7 @@ localStorage.setItem('multiverse-user', %q);
 window.location.replace('/');
 </script>
 </body>
-</html>`, token, string(userJSON))
+</html>`, token, string(userJSON)), nil
 }
 
 func readStringPayload(r *http.Request, key string) (string, error) {

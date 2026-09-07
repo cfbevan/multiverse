@@ -166,6 +166,7 @@ func (app *Application) createAudioPost(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+//nolint:gocognit // multipart validation and persistence involve several guarded branches.
 func (app *Application) createAudioPostHTMX(w http.ResponseWriter, r *http.Request) {
 	if !app.requireSiteSectionEnabled(w, r, "audio_enabled") {
 		return
@@ -256,19 +257,21 @@ func (app *Application) createAudioPostHTMX(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		if errors.Is(err, models.ErrRecordNotFound) {
 			app.clientError(w, http.StatusUnauthorized)
+
 			return
 		}
 		app.serverError(w, r, err)
+
 		return
 	}
 
 	mediaType := strings.TrimSpace(upload.FileContentType)
 	if mediaType == "" {
-		mediaType = "application/octet-stream"
+		mediaType = defaultMediaType
 	}
 	originalFilename := strings.TrimSpace(upload.FileName)
 	if originalFilename == "" {
-		originalFilename = "upload.bin"
+		originalFilename = defaultUploadFilename
 	}
 
 	objectKey := fmt.Sprintf(
@@ -280,6 +283,7 @@ func (app *Application) createAudioPostHTMX(w http.ResponseWriter, r *http.Reque
 	isPublic := visibility == models.VisibilityPublic || visibility == models.VisibilityUnlisted
 	if err := app.uploadMediaFile(ctx, "audio", objectKey, mediaType, upload.FileData); err != nil {
 		app.serverError(w, r, err)
+
 		return
 	}
 
@@ -309,6 +313,7 @@ func (app *Application) createAudioPostHTMX(w http.ResponseWriter, r *http.Reque
 		isPublic,
 	).Scan(&mediaAssetID); err != nil {
 		app.serverError(w, r, err)
+
 		return
 	}
 
@@ -327,6 +332,7 @@ func (app *Application) createAudioPostHTMX(w http.ResponseWriter, r *http.Reque
 	}
 	if err := app.audioPosts.Insert(ctx, post); err != nil {
 		app.serverError(w, r, err)
+
 		return
 	}
 
