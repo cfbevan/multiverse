@@ -1,0 +1,28 @@
+{{define "blogPostForm"}}
+<form
+    hx-post="/blog/partials/create"
+    hx-target="#blogList"
+    hx-swap="afterbegin"
+    hx-on::before-request="const token = localStorage.getItem('multiverse-token'); if (token) { event.detail.xhr.setRequestHeader('Authorization', 'Bearer ' + token); }"
+    hx-on::after-request="if (event.detail.xhr.status >= 200 && event.detail.xhr.status < 300) { event.target.reset(); }"
+>
+    <div class="mb-2">
+        <label class="form-label">Title</label>
+        <input type="text" class="form-control" name="title" maxlength="200" required>
+    </div>
+    <div class="mb-2">
+        <label class="form-label">Body</label>
+        <textarea class="form-control" rows="6" name="body" required></textarea>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Visibility</label>
+        <select class="form-select" name="visibility">
+            <option value="public">public</option>
+            <option value="unlisted">unlisted</option>
+            <option value="followers">followers</option>
+            <option value="private">private</option>
+        </select>
+    </div>
+    <button type="submit" class="btn btn-primary w-100">Publish</button>
+</form>
+{{end}}

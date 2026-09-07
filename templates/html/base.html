@@ -3,14 +3,402 @@
 <html lang='en'>
     <head>
         <meta charset='utf-8'>
+        <meta name='viewport' content='width=device-width, initial-scale=1'>
         <title>{{template "title" .}} - Multiverse</title>
         <link rel='shortcut icon' href='/static/img/favicon.ico' type='image/x-icon'>
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
         <script src="https://unpkg.com/htmx.org@2.0.10"></script>
+        <style>
+            :root {
+                --mv-body-bg: #0b1020;
+                --mv-body-color: #e5e7eb;
+                --mv-panel-bg: rgba(15, 23, 42, 0.92);
+                --mv-card-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+            }
+            [data-bs-theme='light'] {
+                --mv-body-bg: #f5f7fb;
+                --mv-body-color: #1f2937;
+                --mv-panel-bg: rgba(255, 255, 255, 0.9);
+                --mv-card-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
+            }
+            [data-theme-preset='tokyo-night'] {
+                --mv-body-bg: #1a1b26;
+                --mv-body-color: #c0caf5;
+                --mv-panel-bg: rgba(27, 31, 46, 0.94);
+            }
+            [data-theme-preset='tokyo-night-storm'] {
+                --mv-body-bg: #24283b;
+                --mv-body-color: #c0caf5;
+                --mv-panel-bg: rgba(36, 40, 59, 0.94);
+            }
+            [data-theme-preset='catppuccin-latte'] {
+                --mv-body-bg: #eff1f5;
+                --mv-body-color: #4c4f69;
+                --mv-panel-bg: rgba(255, 255, 255, 0.9);
+            }
+            [data-theme-preset='catppuccin-frappe'] {
+                --mv-body-bg: #303446;
+                --mv-body-color: #c6d0f5;
+                --mv-panel-bg: rgba(41, 44, 60, 0.94);
+            }
+            [data-theme-preset='catppuccin-macchiato'] {
+                --mv-body-bg: #24273a;
+                --mv-body-color: #cad3f5;
+                --mv-panel-bg: rgba(36, 39, 58, 0.94);
+            }
+            [data-theme-preset='catppuccin-mocha'] {
+                --mv-body-bg: #1e1e2e;
+                --mv-body-color: #cdd6f4;
+                --mv-panel-bg: rgba(30, 30, 46, 0.94);
+            }
+            body {
+                background: var(--mv-body-bg);
+                color: var(--mv-body-color);
+            }
+            .mv-panel {
+                border: 1px solid rgba(var(--bs-secondary-rgb), 0.2);
+                border-radius: 1rem;
+                box-shadow: var(--mv-card-shadow);
+                background-color: var(--mv-panel-bg);
+            }
+            .theme-picker {
+                max-width: 200px;
+            }
+            .no-view-transitions #page-content {
+                opacity: 1;
+                transition: opacity 140ms ease-in-out;
+            }
+            .no-view-transitions #page-content.htmx-swapping {
+                opacity: 0;
+            }
+        </style>
+        <script>
+            const themePresets = {
+                'default-dark': { bsTheme: 'dark', preset: 'default-dark' },
+                'default-light': { bsTheme: 'light', preset: 'default-light' },
+                'tokyo-night': { bsTheme: 'dark', preset: 'tokyo-night' },
+                'tokyo-night-storm': { bsTheme: 'dark', preset: 'tokyo-night-storm' },
+                'catppuccin-latte': { bsTheme: 'light', preset: 'catppuccin-latte' },
+                'catppuccin-frappe': { bsTheme: 'dark', preset: 'catppuccin-frappe' },
+                'catppuccin-macchiato': { bsTheme: 'dark', preset: 'catppuccin-macchiato' },
+                'catppuccin-mocha': { bsTheme: 'dark', preset: 'catppuccin-mocha' }
+            };
+
+            function applyTheme(name) {
+                const preset = themePresets[name] || themePresets['default-dark'];
+                document.documentElement.setAttribute('data-bs-theme', preset.bsTheme);
+                document.documentElement.setAttribute('data-theme-preset', preset.preset);
+            }
+
+            if (window.htmx) {
+                htmx.config.globalViewTransitions = true;
+            }
+            if (!document.startViewTransition) {
+                document.documentElement.classList.add('no-view-transitions');
+            }
+
+            function browserThemePreset() {
+                return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'default-dark' : 'default-light';
+            }
+
+            function authHeaders() {
+                const headers = new Headers();
+                const token = localStorage.getItem('multiverse-token');
+                if (token) {
+                    headers.set('Authorization', 'Bearer ' + token);
+                }
+
+                return headers;
+            }
+
+            async function authFetch(url, options = {}) {
+                const init = {...options};
+                init.headers = new Headers(options.headers || {});
+                const token = localStorage.getItem('multiverse-token');
+                if (token) {
+                    init.headers.set('Authorization', 'Bearer ' + token);
+                }
+
+                return fetch(url, init);
+            }
+
+            function toggleAuthNodes(selector, visible) {
+                document.querySelectorAll(selector).forEach((node) => {
+                    node.classList.toggle('d-none', !visible);
+                });
+            }
+
+            function getSessionUser() {
+                const raw = localStorage.getItem('multiverse-user');
+                if (!raw) {
+                    return null;
+                }
+
+                try {
+                    return JSON.parse(raw);
+                } catch (err) {
+                    return null;
+                }
+            }
+
+            function getUserInitials(user) {
+                const source = (user && (user.handle || user.display_name || user.email)) || 'MV';
+                const parts = source.trim().split(/\s+/).filter(Boolean);
+                if (parts.length === 0) {
+                    return 'MV';
+                }
+
+                return parts.slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join('');
+            }
+
+            function syncAuthUI(user = null) {
+                const currentUser = user || getSessionUser();
+                const isAuthenticated = Boolean(localStorage.getItem('multiverse-token') && currentUser);
+                const isAdmin = Boolean(currentUser && currentUser.is_admin);
+
+                toggleAuthNodes('[data-auth-state="authenticated"]', isAuthenticated);
+                toggleAuthNodes('[data-auth-state="guest"]', !isAuthenticated);
+                toggleAuthNodes('[data-auth-state="admin"]', isAdmin);
+
+                if (currentUser) {
+                    const initials = getUserInitials(currentUser);
+                    document.querySelectorAll('[data-user-icon]').forEach((node) => {
+                        node.textContent = initials;
+                    });
+                    document.querySelectorAll('[data-user-name]').forEach((node) => {
+                        node.textContent = currentUser.handle || currentUser.display_name || 'Account';
+                    });
+                }
+            }
+
+            function logoutClient() {
+                localStorage.removeItem('multiverse-token');
+                localStorage.removeItem('multiverse-user');
+                syncAuthUI(null);
+                applyTheme(browserThemePreset());
+                window.location.href = '/';
+            }
+
+            async function bootstrapSession() {
+                const token = localStorage.getItem('multiverse-token');
+                if (!token) {
+                    syncAuthUI(null);
+                    applyTheme(browserThemePreset());
+
+                    return;
+                }
+
+                try {
+                    const response = await authFetch('/v1/accounts/me', {method: 'GET'});
+                    if (!response.ok) {
+                        throw new Error('session unavailable');
+                    }
+
+                    const payload = await response.json();
+                    localStorage.setItem('multiverse-user', JSON.stringify(payload.user));
+                    syncAuthUI(payload.user);
+                    applyTheme(payload.settings?.theme_preset || browserThemePreset());
+                    window.mvSession = payload;
+                    window.dispatchEvent(new CustomEvent('mv:session-loaded', {detail: payload}));
+                } catch (err) {
+                    localStorage.removeItem('multiverse-token');
+                    localStorage.removeItem('multiverse-user');
+                    syncAuthUI(null);
+                    applyTheme(browserThemePreset());
+                }
+            }
+
+            function handleAuthResponse(event) {
+                const xhr = event.detail.xhr;
+                const target = event.target;
+                const messageBox = document.getElementById(target.dataset.messageId || 'formMessage');
+
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    let payload = null;
+                    try {
+                        payload = JSON.parse(xhr.responseText);
+                    } catch (err) {
+                        payload = null;
+                    }
+                    if (payload && payload.token) {
+                        localStorage.setItem('multiverse-token', payload.token);
+                        if (payload.user) {
+                            localStorage.setItem('multiverse-user', JSON.stringify(payload.user));
+                        }
+                        syncAuthUI(payload.user || null);
+                        window.location.href = '/';
+                        return;
+                    }
+                    return;
+                }
+
+                let message = 'Something went wrong.';
+                try {
+                    const payload = JSON.parse(xhr.responseText);
+                    if (payload && payload.error) {
+                        if (typeof payload.error === 'string') {
+                            message = payload.error;
+                        } else if (typeof payload.error === 'object') {
+                            const entries = Object.values(payload.error).filter(Boolean);
+                            if (entries.length > 0) {
+                                message = entries[0];
+                            }
+                        }
+                    }
+                } catch (err) {
+                    message = xhr.statusText || message;
+                }
+
+                if (messageBox) {
+                    messageBox.className = 'mt-3 alert alert-danger py-2 px-3 mb-0';
+                    messageBox.textContent = message;
+                }
+            }
+
+            function syncFeedSelectorActiveState(container, feedValue) {
+                if (!container || !feedValue) {
+                    return;
+                }
+
+                container.querySelectorAll('button[data-feed-value]').forEach((button) => {
+                    const isActive = button.dataset.feedValue === feedValue;
+                    button.classList.toggle('btn-primary', isActive);
+                    button.classList.toggle('btn-outline-primary', !isActive);
+                });
+            }
+
+            function syncNavActiveState() {
+                const path = window.location.pathname;
+                document.querySelectorAll('[data-nav-path]').forEach((link) => {
+                    const route = link.dataset.navPath;
+                    const isActive = route === '/'
+                        ? path === '/'
+                        : (path === route || path.startsWith(route + '/'));
+
+                    link.classList.toggle('active', isActive);
+                    if (isActive) {
+                        link.setAttribute('aria-current', 'page');
+                    } else {
+                        link.removeAttribute('aria-current');
+                    }
+                });
+            }
+
+            function syncFeedSelectorsFromURL() {
+                const feed = new URLSearchParams(window.location.search).get('feed') || 'local';
+                document.querySelectorAll('[data-feed-selector]').forEach((container) => {
+                    syncFeedSelectorActiveState(container, feed);
+                });
+            }
+
+            document.addEventListener('DOMContentLoaded', () => {
+                bootstrapSession();
+                syncFeedSelectorsFromURL();
+                syncNavActiveState();
+
+                document.body.addEventListener('click', (event) => {
+                    const button = event.target.closest('button[data-feed-value]');
+                    if (!button) {
+                        return;
+                    }
+
+                    const container = button.closest('[data-feed-selector]');
+                    if (!container) {
+                        return;
+                    }
+
+                    syncFeedSelectorActiveState(container, button.dataset.feedValue);
+                });
+
+                document.body.addEventListener('htmx:pushedIntoHistory', () => {
+                    syncFeedSelectorsFromURL();
+                    syncNavActiveState();
+                });
+
+                window.addEventListener('popstate', () => {
+                    syncFeedSelectorsFromURL();
+                    syncNavActiveState();
+                });
+
+                document.body.addEventListener('htmx:afterSwap', (event) => {
+                    if (event.target && event.target.id === 'page-content') {
+                        syncFeedSelectorsFromURL();
+                        syncNavActiveState();
+                        syncAuthUI();
+                    }
+                });
+
+                document.body.addEventListener('click', (event) => {
+                    const button = event.target.closest('.reply-trigger');
+                    if (!button) {
+                        return;
+                    }
+
+                    const modal = document.getElementById('commentReplyModal');
+                    const text = document.getElementById('commentReplyText');
+                    const entityType = button.dataset.entityType;
+                    const entityId = button.dataset.entityId;
+                    if (!modal || !text || !entityType || !entityId) {
+                        return;
+                    }
+
+                    document.getElementById('commentReplyEntityType').value = entityType;
+                    document.getElementById('commentReplyEntityId').value = entityId;
+                    text.value = '';
+                    const bsModal = new bootstrap.Modal(modal);
+                    bsModal.show();
+                });
+
+                document.getElementById('commentReplyForm')?.addEventListener('submit', async (event) => {
+                    event.preventDefault();
+                    const form = event.currentTarget;
+                    const entityType = document.getElementById('commentReplyEntityType').value;
+                    const entityId = document.getElementById('commentReplyEntityId').value;
+                    const content = document.getElementById('commentReplyText').value.trim();
+                    if (!content) {
+                        return;
+                    }
+
+                    const response = await authFetch('/v1/comments', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({entity_type: entityType, entity_id: Number(entityId), content}),
+                    });
+                    if (response.ok) {
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('commentReplyModal'));
+                        modal?.hide();
+                        window.location.reload();
+                    }
+                });
+            });
+
+            window.addEventListener('storage', bootstrapSession);
+        </script>
     </head>
     <body>
         {{template "nav" .}}
-        <main>
+        <div class="modal fade" id="commentReplyModal" tabindex="-1" aria-labelledby="commentReplyModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <form id="commentReplyForm">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="commentReplyModalLabel">Reply</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <input type="hidden" id="commentReplyEntityType" value="">
+                            <input type="hidden" id="commentReplyEntityId" value="">
+                            <textarea id="commentReplyText" class="form-control" rows="4" placeholder="Write a comment..." required></textarea>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Post comment</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <main id="page-content" class="container py-4">
             {{with .Flash}}
                 <div class='flash'>{{.}}</div>
             {{end}}
@@ -19,6 +407,8 @@
         <footer>
             Powered by <a href='https://golang.org/'>Go</a> in 2026
         </footer>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+        {{block "scripts" .}}{{end}}
     </body>
 </html>
 {{end}}

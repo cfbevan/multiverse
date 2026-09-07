@@ -1,31 +1,31 @@
 {{define "title"}}Home{{end}}
 
 {{define "main"}}
-    <div class="row">
-
-        <div class="col">
-            <h2>Tasks</h2>
-
-            <div>
-                <a href="#" hx-get="/newtaskform" hx-target="#addTaskForm">Add New Item</a>
+    <div class="row g-4">
+        <div class="col-12">
+            <div class="mv-panel p-3 p-md-4">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
+                    <div>
+                        <h1 class="h3 mb-1">System Updates</h1>
+                        <p class="text-body-secondary mb-0">Recent release highlights from this node.</p>
+                    </div>
+                </div>
+                {{if .ReleaseNotes}}
+                    <div class="d-grid gap-3">
+                        {{range .ReleaseNotes}}
+                            <article class="card border-0 shadow-sm w-100">
+                                <div class="card-body">
+                                    <p class="text-body-secondary small mb-2">{{.Date}}</p>
+                                    <h2 class="h6 mb-3">{{.Version}}</h2>
+                                    <p class="mb-0">{{.Summary}}</p>
+                                </div>
+                            </article>
+                        {{end}}
+                    </div>
+                {{else}}
+                    <div class="alert alert-secondary mb-0" role="alert">No changelog entries yet.</div>
+                {{end}}
             </div>
-
-            <div id="taskList" hx-get="/tasks" hx-trigger="load" hx-swap="innerHTML">
-
-            </div>
-
         </div>
-        <!-- <div class="col">
-
-        </div> -->
-        <div class="col">
-            <h2>Add New Task</h2>
-
-            <div id="addTaskForm">
-                {{template "addTaskForm"}}
-            </div>
-
-        </div>
-
     </div>
 {{end}}

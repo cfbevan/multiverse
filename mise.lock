@@ -162,3 +162,7 @@ url_api = "https://api.github.com/repos/vektra/mockery/releases/assets/511944643
 checksum = "sha256:53c3592aae7652ff2b15f3a246d19b407c6fa958301ce042df6400b145425442"
 url = "https://github.com/vektra/mockery/releases/download/v3.7.3/mockery_3.7.3_Windows_x86_64.tar.gz"
 url_api = "https://api.github.com/repos/vektra/mockery/releases/assets/511944622"
+
+[[tools.svu]]
+version = "3.4.1"
+backend = "aqua:caarlos0/svu"

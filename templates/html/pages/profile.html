@@ -1,0 +1,119 @@
+{{define "title"}}Profile{{end}}
+
+{{define "main"}}
+<div class="row g-4">
+    <div class="col-lg-4 d-none" data-auth-state="authenticated">
+        <div class="mv-panel p-4 text-center h-100">
+            <div class="rounded-circle bg-success-subtle text-success d-inline-flex align-items-center justify-content-center fw-bold mx-auto mb-3" style="width: 5rem; height: 5rem; font-size: 1.5rem;" data-profile-icon>MV</div>
+            <h1 class="h3 mb-1" data-profile-handle>@account</h1>
+            <p class="text-body-secondary mb-0" data-profile-name>Account</p>
+            <p class="mt-3 mb-0" data-profile-bio></p>
+        </div>
+    </div>
+    <div class="col-lg-8 d-none" data-auth-state="authenticated">
+        <div class="mv-panel p-4 mb-4">
+            <h2 class="h5 mb-3">Account</h2>
+            <dl class="row mb-0">
+                <dt class="col-sm-4 text-body-secondary">Email</dt>
+                <dd class="col-sm-8" data-profile-email>—</dd>
+                <dt class="col-sm-4 text-body-secondary">Handle</dt>
+                <dd class="col-sm-8" data-profile-handle-inline>@account</dd>
+                <dt class="col-sm-4 text-body-secondary">Display name</dt>
+                <dd class="col-sm-8" data-profile-name-inline>Account</dd>
+                <dt class="col-sm-4 text-body-secondary">Admin</dt>
+                <dd class="col-sm-8" data-profile-admin>—</dd>
+            </dl>
+        </div>
+
+        <div class="mv-panel p-4">
+            <h2 class="h5 mb-3">Federation</h2>
+            <dl class="row mb-0">
+                <dt class="col-sm-4 text-body-secondary">Actor ID</dt>
+                <dd class="col-sm-8" data-profile-actor-id>—</dd>
+                <dt class="col-sm-4 text-body-secondary">Domain</dt>
+                <dd class="col-sm-8" data-profile-domain>—</dd>
+                <dt class="col-sm-4 text-body-secondary">Inbox</dt>
+                <dd class="col-sm-8 text-break" data-profile-inbox>—</dd>
+                <dt class="col-sm-4 text-body-secondary">Outbox</dt>
+                <dd class="col-sm-8 text-break" data-profile-outbox>—</dd>
+                <dt class="col-sm-4 text-body-secondary">Followers</dt>
+                <dd class="col-sm-8" data-profile-followers>—</dd>
+                <dt class="col-sm-4 text-body-secondary">Following</dt>
+                <dd class="col-sm-8" data-profile-following>—</dd>
+                <dt class="col-sm-4 text-body-secondary">Public key</dt>
+                <dd class="col-sm-8 text-break" data-profile-public-key>—</dd>
+            </dl>
+        </div>
+    </div>
+    <div class="col-12 d-none" data-auth-state="guest">
+        <div class="mv-panel p-4 text-center">
+            <h1 class="h4">Sign in to view your profile</h1>
+            <p class="text-body-secondary mb-0">Use the login link in the menu to access your account profile and federation details.</p>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+    function renderProfile(session) {
+        if (!session || !session.user) {
+            return;
+        }
+
+        const user = session.user;
+        const actor = session.actor || {};
+
+        document.querySelectorAll('[data-profile-handle]').forEach((node) => {
+            node.textContent = '@' + (user.handle || 'account');
+        });
+        document.querySelectorAll('[data-profile-handle-inline]').forEach((node) => {
+            node.textContent = '@' + (user.handle || 'account');
+        });
+        document.querySelectorAll('[data-profile-name]').forEach((node) => {
+            node.textContent = user.display_name || user.handle || 'Account';
+        });
+        document.querySelectorAll('[data-profile-name-inline]').forEach((node) => {
+            node.textContent = user.display_name || user.handle || 'Account';
+        });
+        document.querySelectorAll('[data-profile-email]').forEach((node) => {
+            node.textContent = user.email || '—';
+        });
+        document.querySelectorAll('[data-profile-bio]').forEach((node) => {
+            node.textContent = user.bio || 'No bio set.';
+        });
+        document.querySelectorAll('[data-profile-admin]').forEach((node) => {
+            node.textContent = user.is_admin ? 'Yes' : 'No';
+        });
+        document.querySelectorAll('[data-profile-icon]').forEach((node) => {
+            node.textContent = (user.handle || 'mv').slice(0, 2).toUpperCase();
+        });
+        document.querySelectorAll('[data-profile-actor-id]').forEach((node) => {
+            node.textContent = actor.id ? String(actor.id) : '—';
+        });
+        document.querySelectorAll('[data-profile-domain]').forEach((node) => {
+            node.textContent = actor.domain || '—';
+        });
+        document.querySelectorAll('[data-profile-inbox]').forEach((node) => {
+            node.textContent = actor.inbox_url || '—';
+        });
+        document.querySelectorAll('[data-profile-outbox]').forEach((node) => {
+            node.textContent = actor.outbox_url || '—';
+        });
+        document.querySelectorAll('[data-profile-followers]').forEach((node) => {
+            node.textContent = actor.followers_count != null ? String(actor.followers_count) : '—';
+        });
+        document.querySelectorAll('[data-profile-following]').forEach((node) => {
+            node.textContent = actor.following_count != null ? String(actor.following_count) : '—';
+        });
+        document.querySelectorAll('[data-profile-public-key]').forEach((node) => {
+            node.textContent = actor.public_key_id || '—';
+        });
+    }
+
+    window.addEventListener('mv:session-loaded', (event) => renderProfile(event.detail));
+    if (window.mvSession) {
+        renderProfile(window.mvSession);
+    }
+</script>
+{{end}}

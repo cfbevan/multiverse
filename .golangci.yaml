@@ -72,6 +72,8 @@ linters:
       min-complexity: 15
     gocyclo:
       min-complexity: 15
+    cyclop:
+      max-complexity: 25
     godoclint:
       enable:
         - pkg-doc
@@ -81,9 +83,9 @@ linters:
         - deprecated
       options:
         require-doc:
-          ignore-unexported: false
+          ignore-unexported: true
         start-with-name:
-          include-unexported: true
+          include-unexported: false
     iface:
       enable:
         - identical

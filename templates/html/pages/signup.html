@@ -1,0 +1,60 @@
+{{define "title"}}Sign up{{end}}
+
+{{define "main"}}
+<div class="row justify-content-center">
+    <div class="col-md-7 col-lg-6">
+        <div class="mv-panel p-4 p-md-5">
+            <h1 class="h2 mb-3">Create account</h1>
+            <p class="text-body-secondary mb-4">Join Multiverse and start sharing with the network.</p>
+
+            {{if and .OIDCEnabled .OIDCLoginEnabled .OIDCAnyProviderConfigured}}
+            <div class="d-grid gap-2 mb-3">
+                {{if .OIDCGoogleConfigured}}
+                <a class="btn btn-outline-primary" href="/v1/auth/oidc/login?provider=google">Continue with Google</a>
+                {{end}}
+                {{if .OIDCAppleConfigured}}
+                <a class="btn btn-outline-secondary" href="/v1/auth/oidc/login?provider=apple">Continue with Apple</a>
+                {{end}}
+                {{if .OIDCFacebookConfigured}}
+                <a class="btn btn-outline-info" href="/v1/auth/oidc/login?provider=facebook">Continue with Facebook</a>
+                {{end}}
+            </div>
+            <div class="d-flex align-items-center my-3">
+                <hr class="flex-grow-1 border-secondary-subtle">
+                <span class="px-2 text-body-secondary small">or sign up with email</span>
+                <hr class="flex-grow-1 border-secondary-subtle">
+            </div>
+            {{end}}
+
+            <form hx-post="/v1/accounts/signup" hx-swap="innerHTML" hx-target="#signupFormMessage" hx-on::after-request="handleAuthResponse(event)" data-message-id="signupFormMessage">
+                <div class="mb-3">
+                    <label class="form-label" for="signup-email">Email</label>
+                    <input class="form-control" id="signup-email" name="email" type="email" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="signup-handle">Handle</label>
+                    <input class="form-control" id="signup-handle" name="handle" type="text" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="signup-display-name">Display name</label>
+                    <input class="form-control" id="signup-display-name" name="display_name" type="text" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="signup-password">Password</label>
+                    <input class="form-control" id="signup-password" name="password" type="password" minlength="8" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="signup-bio">Bio</label>
+                    <textarea class="form-control" id="signup-bio" name="bio" rows="3"></textarea>
+                </div>
+                <button class="btn btn-primary w-100" type="submit">Create account</button>
+                <div id="signupFormMessage" class="mt-3"></div>
+            </form>
+
+            <p class="text-center mt-3 mb-0 text-body-secondary">
+                Already have an account? <a href="/user/login">Log in</a>
+            </p>
+        </div>
+    </div>
+</div>
+{{end}}

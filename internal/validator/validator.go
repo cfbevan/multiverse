@@ -9,7 +9,9 @@ import (
 
 var (
 	// EmailRX is a regular expression pattern used to validate email addresses.
-	EmailRX = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
+	EmailRX = regexp.MustCompile(
+		"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$",
+	)
 )
 
 // Validator is a struct that holds validation errors for both field-specific and non-field-specific errors.
@@ -84,6 +86,7 @@ func Matches(value string, rx *regexp.Regexp) bool {
 	return rx.MatchString(value)
 }
 
+// Unique reports whether all values in the slice are distinct.
 func Unique[T comparable](values []T) bool {
 	uniqueValues := make(map[T]bool)
 

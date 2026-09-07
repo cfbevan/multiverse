@@ -1,0 +1,169 @@
+{{define "title"}}Site settings{{end}}
+
+{{define "main"}}
+<div class="row g-4">
+    <div class="col-12 d-none" data-auth-state="guest">
+        <div class="mv-panel p-4 text-center">
+            <h1 class="h4">Admin access required</h1>
+            <p class="text-body-secondary mb-0">Sign in with an administrator account to manage site settings.</p>
+        </div>
+    </div>
+
+    <div class="col-12 d-none" id="siteSettingsDenied">
+        <div class="mv-panel p-4 text-center">
+            <h1 class="h4">Admin access required</h1>
+            <p class="text-body-secondary mb-0">Your account is signed in, but it does not have permission to manage site settings.</p>
+        </div>
+    </div>
+
+    <div class="col-12 d-none" data-auth-state="admin">
+        <div class="mv-panel p-4 mb-4">
+            <h1 class="h3 mb-2">Site settings</h1>
+            <p class="text-body-secondary mb-0">Enable or disable global site configurations and content verticals.</p>
+        </div>
+
+        <div class="mv-panel p-4 mb-4">
+            <h2 class="h5 mb-3">OIDC providers</h2>
+            <p class="text-body-secondary small mb-3">Client IDs and secrets are sourced from environment variables. This table only shows whether each value is configured.</p>
+            <div class="table-responsive">
+                <table class="table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th scope="col">Provider</th>
+                            <th scope="col">Client ID</th>
+                            <th scope="col">Client secret</th>
+                            <th scope="col">Redirect URL</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .OIDCProviders}}
+                        <tr>
+                            <td class="fw-semibold">{{.Name}}</td>
+                            <td>
+                                {{if .ClientIDSet}}
+                                <span class="badge text-bg-success">Configured</span>
+                                {{else}}
+                                <span class="badge text-bg-secondary">Missing</span>
+                                {{end}}
+                            </td>
+                            <td>
+                                {{if .SecretSet}}
+                                <span class="badge text-bg-success">Configured</span>
+                                {{else}}
+                                <span class="badge text-bg-secondary">Missing</span>
+                                {{end}}
+                            </td>
+                            <td class="text-body-secondary small">{{.RedirectURL}}</td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="mv-panel p-4">
+            <div id="siteSettingsMessage" class="mb-3"></div>
+            <div class="table-responsive">
+                <table class="table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th scope="col">Key</th>
+                            <th scope="col">Description</th>
+                            <th scope="col">Enabled</th>
+                        </tr>
+                    </thead>
+                    <tbody id="siteConfigRows">
+                        <tr><td colspan="3" class="text-body-secondary">Loading site configs...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+    function renderSiteConfigRows(configs) {
+        const tbody = document.getElementById('siteConfigRows');
+        if (!tbody) {
+            return;
+        }
+
+        if (!configs || configs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3" class="text-body-secondary">No site configs found.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = configs.map((config) => {
+            const checked = config.enabled ? 'checked' : '';
+            return `
+                <tr>
+                    <td class="fw-semibold">${config.key}</td>
+                    <td class="text-body-secondary">${config.description || ''}</td>
+                    <td>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" ${checked} onchange="toggleSiteConfig('${config.key}', this.checked)">
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function setSiteMessage(message, kind = 'success') {
+        const node = document.getElementById('siteSettingsMessage');
+        if (!node) {
+            return;
+        }
+
+        node.className = 'alert alert-' + kind + ' py-2 px-3 mb-0';
+        node.textContent = message;
+    }
+
+    async function loadSiteConfigs() {
+        const response = await authFetch('/v1/site-configs', {method: 'GET'});
+        if (!response.ok) {
+            setSiteMessage('Unable to load site settings.', 'danger');
+            return;
+        }
+
+        const payload = await response.json();
+        renderSiteConfigRows(payload.site_configs || []);
+    }
+
+    async function toggleSiteConfig(key, enabled) {
+        const response = await authFetch('/v1/site-configs/' + encodeURIComponent(key), {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({enabled: enabled}),
+        });
+
+        if (!response.ok) {
+            setSiteMessage('Unable to update ' + key + '.', 'danger');
+            return;
+        }
+
+        setSiteMessage(key + ' updated.', 'success');
+    }
+
+    window.addEventListener('mv:session-loaded', (event) => {
+        const user = event.detail?.user;
+        if (user?.is_admin) {
+            loadSiteConfigs();
+            const denied = document.getElementById('siteSettingsDenied');
+            if (denied) {
+                denied.classList.add('d-none');
+            }
+        } else if (user) {
+            const denied = document.getElementById('siteSettingsDenied');
+            if (denied) {
+                denied.classList.remove('d-none');
+            }
+        }
+    });
+    if (window.mvSession?.user?.is_admin) {
+        loadSiteConfigs();
+    }
+</script>
+{{end}}

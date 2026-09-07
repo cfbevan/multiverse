@@ -3,8 +3,43 @@ go = "1.27"
 golangci-lint = "latest"
 goreleaser = "latest"
 mockery = "latest"
+svu = "latest"
+
+[env]
+_.file = ".env"
 
 [tasks.serve]
 description = "Run the app"
 sources = ["cmd/server/*", "internal/**/*", "templates/html/**/*"]
 run = "go run ./cmd/server"
+
+[tasks.migrate]
+description = "Run database migrations"
+sources = ["cmd/ctl/*", "internal/admincli/*", "migrations/*.sql"]
+run = "go run ./cmd/ctl migrate"
+
+[tasks.ctl]
+description = "Run the admin helper CLI"
+sources = ["cmd/ctl/*", "internal/admincli/*"]
+run = "go run ./cmd/ctl"
+
+[tasks.test]
+description = "Run test suite"
+run = "go test ./..."
+
+[tasks.test-integration]
+description = "Run integration tests"
+sources = ["internal/ui/*", "migrations/*.sql"]
+run = "go test ./internal/ui -run Integration -v"
+
+[tasks.lint]
+description = "Run linters"
+run = "golangci-lint run --fix ./..."
+
+[tasks.release]
+description = "Build and publish a release with GoReleaser"
+run = "goreleaser release --clean"
+
+[tasks.format]
+description = "Format code"
+run = "golangci-lint fmt ./..."

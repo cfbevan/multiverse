@@ -1,0 +1,27 @@
+{{define "blogPostList"}}
+{{if .Posts}}
+    {{range .Posts}}
+        {{template "blogPostCard" .}}
+    {{end}}
+{{else}}
+    <div class="alert alert-secondary mb-0">No blog posts yet.</div>
+{{end}}
+{{end}}
+
+{{define "blogPostCard"}}
+<article class="card mb-3">
+    <div class="card-body">
+        <h3 class="h5 card-title"><a href="/blog/{{.ID}}" class="text-decoration-none text-reset">{{.Title}}</a></h3>
+        <p class="card-text text-body-secondary small mb-1">{{humanDate .PublishedAt}} | {{.Visibility}}</p>
+        <p class="card-text mb-0">{{.BodyMarkdown}}</p>
+    </div>
+</article>
+{{end}}
+
+{{define "blogFormError"}}
+{{if .Errors}}
+    {{range $key, $value := .Errors}}
+        <div class="alert alert-danger py-2 mb-2">{{$key}} {{$value}}</div>
+    {{end}}
+{{end}}
+{{end}}

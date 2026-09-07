@@ -1,0 +1,124 @@
+{{define "title"}}Settings{{end}}
+
+{{define "main"}}
+<div class="row g-4">
+    <div class="col-12 d-none" data-auth-state="guest">
+        <div class="mv-panel p-4 text-center">
+            <h1 class="h4">Sign in to manage your settings</h1>
+            <p class="text-body-secondary mb-0">Theme, password reset, and account preferences are available after login.</p>
+        </div>
+    </div>
+
+    <div class="col-lg-8 d-none" data-auth-state="authenticated">
+        <div class="mv-panel p-4 mb-4">
+            <h1 class="h3 mb-2">User settings</h1>
+            <p class="text-body-secondary mb-0" data-settings-summary>Manage your appearance and account recovery options.</p>
+        </div>
+
+        <div class="mv-panel p-4 mb-4">
+            <h2 class="h5 mb-3">Theme</h2>
+            <form onsubmit="return saveThemeSettings(event)">
+                <div class="mb-3">
+                    <label class="form-label" for="themePresetSelect">Theme preset</label>
+                    <select id="themePresetSelect" class="form-select">
+                        <option value="default-dark">Default dark</option>
+                        <option value="default-light">Default light</option>
+                        <option value="tokyo-night">Tokyo-night</option>
+                        <option value="tokyo-night-storm">Tokyo-night storm</option>
+                        <option value="catppuccin-latte">Catppuccin latte</option>
+                        <option value="catppuccin-frappe">Catppuccin frappe</option>
+                        <option value="catppuccin-macchiato">Catppuccin Macchiato</option>
+                        <option value="catppuccin-mocha">Catppuccin Mocha</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" type="submit">Save theme</button>
+                <div id="themeSettingsMessage" class="mt-3"></div>
+            </form>
+        </div>
+
+        <div class="mv-panel p-4">
+            <h2 class="h5 mb-3">Password reset by email</h2>
+            <p class="text-body-secondary">We will email you a link that opens the password reset page.</p>
+            <form onsubmit="return requestPasswordResetEmail(event)">
+                <button class="btn btn-outline-primary" type="submit">Email reset link</button>
+                <div id="resetEmailMessage" class="mt-3"></div>
+            </form>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+    function setMessage(nodeId, message, kind = 'success') {
+        const node = document.getElementById(nodeId);
+        if (!node) {
+            return;
+        }
+
+        node.className = 'mt-3 alert alert-' + kind + ' py-2 px-3 mb-0';
+        node.textContent = message;
+    }
+
+    function renderSettings(session) {
+        if (!session || !session.user) {
+            return;
+        }
+
+        const summary = document.querySelector('[data-settings-summary]');
+        if (summary) {
+            summary.textContent = 'Manage settings for @' + (session.user.handle || 'account');
+        }
+
+        const select = document.getElementById('themePresetSelect');
+        if (select) {
+            select.value = session.settings?.theme_preset || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'default-dark' : 'default-light');
+        }
+    }
+
+    async function saveThemeSettings(event) {
+        event.preventDefault();
+
+        const select = document.getElementById('themePresetSelect');
+        const payload = {theme_preset: select ? select.value : 'default-dark'};
+        const response = await authFetch('/v1/accounts/me/settings/theme', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+            setMessage('themeSettingsMessage', 'Unable to save theme settings.', 'danger');
+            return false;
+        }
+
+        const data = await response.json();
+        applyTheme(data.theme_preset || payload.theme_preset);
+        setMessage('themeSettingsMessage', 'Theme saved.', 'success');
+        return false;
+    }
+
+    async function requestPasswordResetEmail(event) {
+        event.preventDefault();
+
+        const response = await authFetch('/v1/accounts/me/password-reset-email', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({}),
+        });
+
+        if (!response.ok) {
+            setMessage('resetEmailMessage', 'Unable to send the reset email.', 'danger');
+            return false;
+        }
+
+        setMessage('resetEmailMessage', 'Password reset email sent.', 'success');
+        return false;
+    }
+
+    window.addEventListener('mv:session-loaded', (event) => renderSettings(event.detail));
+    if (window.mvSession) {
+        renderSettings(window.mvSession);
+    }
+</script>
+{{end}}
