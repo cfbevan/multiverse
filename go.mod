@@ -7,7 +7,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/lib/pq v1.10.9
 	github.com/minio/minio-go/v7 v7.0.73
-	golang.org/x/crypto v0.37.0
+	golang.org/x/crypto v0.56.0
 )
 
 require (
@@ -20,7 +20,7 @@ require (
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/rs/xid v1.5.0 // indirect
 	github.com/stretchr/testify v1.12.1 // indirect
-	golang.org/x/net v0.26.0 // indirect
-	golang.org/x/sys v0.32.0 // indirect
-	golang.org/x/text v0.24.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 )
