@@ -27,6 +27,10 @@ run = "go run ./cmd/ctl"
 description = "Run test suite"
 run = "go test ./... -count=1 -v -skip Integration"
 
+[tasks.test-build]
+description = "Run build tests"
+run = "goreleaser build --snapshot --clean"
+
 [tasks.test-integration]
 description = "Run integration tests"
 sources = ["internal/ui/*", "migrations/*.sql"]
